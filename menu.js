@@ -8,7 +8,7 @@ exports.initialize = ( selectFolders ) =>
 			label: 'File',
 			submenu:
 			[
-				{ label: 'Open SavedClips...', click: selectFolders }
+				{ label: 'Open Folder...', accelerator: 'CmdOrCtrl+O', click: selectFolders }
 			]
 		},
 		{

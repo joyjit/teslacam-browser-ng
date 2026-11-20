@@ -3,14 +3,44 @@
 // ui.js (createPlayerMixin, SynchronizedVideo), shared with the desktop page.
 ( function ()
 {
-	var handlers =
+	// The desktop app (preload.js) provides window.teslacam; in a browser the
+	// same calls go to the server.
+	var api = window.teslacam
+	var desktop = !!api
+
+	function encodePath( p )
 	{
-		openFolder: ( p, success ) => $.getJSON( p ? "openFolder" + p : "openDefaultFolder", success ),
-		getFiles: ( p, success ) => $.getJSON( "files/" + p, success ),
-		openBrowser: () => {},
-		// A click on a video enlarges the camera here instead of opening the file.
-		openExternal: () => {}
+		return String( p ).split( "/" ).map( encodeURIComponent ).join( "/" )
 	}
+
+	function joinPath( folder, relative )
+	{
+		return String( folder || "" ).replace( /[\\/]+$/, "" ) + "/" + relative
+	}
+
+	var handlers = desktop
+		? {
+			openFolder: ( p, done ) => done( api.openFolder( p ) ),
+			chooseFolder: done => done( api.openFolders() ),
+			reopen: done => done( api.reopenFolders() ),
+			getFiles: ( p, done ) => done( api.getFiles( p ) ),
+			fileUrl: ( args, relative ) => joinPath( args.folder, relative ),
+			deleteFolder: ( relative, done ) => { api.deleteFolder( relative ); done() },
+			copyPath: ( args, relative ) => api.copyPath( relative ),
+			showInFolder: ( args, relative ) => api.openExternal( joinPath( args.folder, relative ) ),
+			openBrowser: () => api.openBrowser(),
+			// A click on a video enlarges the camera instead of opening the file.
+			openExternal: () => {}
+		}
+		: {
+			openFolder: ( p, done ) => $.getJSON( p ? "openFolder" + encodePath( p ) : "openDefaultFolder", done ),
+			reopen: done => $.getJSON( "reopenFolders", done ),
+			getFiles: ( p, done ) => $.getJSON( "files/" + encodePath( p ), done ),
+			fileUrl: ( args, relative ) => "videos/" + encodePath( relative ),
+			copyPath: ( args, relative ) => navigator.clipboard && navigator.clipboard.writeText( joinPath( args.folder, relative ) ),
+			openBrowser: () => {},
+			openExternal: () => {}
+		}
 
 	function words( value )
 	{
@@ -128,7 +158,13 @@
 			focus: null,
 			fromList: false,
 			isPhone: phone.matches,
-			picker: null
+			picker: null,
+			showFolders: false,
+			desktop: desktop,
+			canDelete: !!handlers.deleteFolder,
+			canChoose: !!handlers.chooseFolder,
+			canShow: !!handlers.showInFolder,
+			copied: false
 		},
 		computed:
 		{
@@ -181,6 +217,12 @@
 
 				return time ? time.toLocaleTimeString() : "--:--:--"
 			},
+			folderName: function()
+			{
+				var parts = this.args.folderPathParts || []
+
+				return parts.length ? parts[ parts.length - 1 ].name : ""
+			},
 			elapsedText: function()
 			{
 				function mmss( s )
@@ -213,6 +255,9 @@
 		{
 			handlers.openFolder( null, a => this.args = a )
 
+			// File > Open Folder... in the desktop app's menu.
+			if ( api && api.onFolderOpened ) api.onFolderOpened( a => this.args = a )
+
 			window.addEventListener( "hashchange", () => this.selectFromHash() )
 			phone.addEventListener( "change", m => this.isPhone = m.matches )
 			document.addEventListener( "keydown", e => this.key( e ) )
@@ -230,7 +275,50 @@
 			},
 			thumbUrl: function( e )
 			{
-				return "videos/" + e.relative.split( "/" ).map( encodeURIComponent ).join( "/" ) + "/thumb.png"
+				return handlers.fileUrl( this.args, e.relative + "/thumb.png" )
+			},
+			openFolder: function( folder )
+			{
+				handlers.openFolder( folder, a => this.args = a )
+			},
+			toggleFolders: function()
+			{
+				this.showFolders = !this.showFolders
+
+				// Nothing open yet: start browsing at the top of the disk.
+				if ( this.showFolders && !this.args.folder ) this.openFolder( "/" )
+			},
+			chooseFolder: function()
+			{
+				handlers.chooseFolder( a =>
+				{
+					this.args = a
+					this.showFolders = false
+				} )
+			},
+			copyPath: function()
+			{
+				handlers.copyPath( this.args, this.selected.relative )
+				this.copied = true
+				setTimeout( () => this.copied = false, 1500 )
+			},
+			showInFolder: function()
+			{
+				handlers.showInFolder( this.args, this.selected.relative )
+			},
+			deleteEvent: function()
+			{
+				var e = this.selected
+
+				if ( !e || !confirm( `Delete ${e.relative} and every file in it? This cannot be undone.` ) ) return
+
+				this.controls.playing = false
+				this.selected = null
+				handlers.deleteFolder( e.relative, () => handlers.reopen( a => this.args = a ) )
+			},
+			openBrowser: function()
+			{
+				handlers.openBrowser()
 			},
 			timeText: function( date )
 			{

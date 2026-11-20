@@ -42,8 +42,9 @@ function createWindow()
 		}
 	} )
 
-	// and load the index.html of the app.
-	mainWindow.loadFile( "index.html" )
+	// The same page the server shows (web.html), talking to this process
+	// through preload.js instead of HTTP.
+	mainWindow.loadFile( "web.html" )
 
 	// Open the DevTools.
 	// mainWindow.webContents.openDevTools()
@@ -56,8 +57,6 @@ function createWindow()
 		// when you should delete the corresponding element.
 		mainWindow = null
 	} )
-
-	menu.initialize( () => selectFolders( mainWindow.webContents ) )
 
 	initialize()
 }
@@ -88,30 +87,19 @@ function initialize()
 
 	services.setVersion( app.getVersion() )
 
-	var lastFolder = settings.get( "folders" )
+	// The folder last opened, by the dialog or the page's folder list. Checked
+	// before the page asks for it, so a drive that was unplugged since shows
+	// "Choose a folder" instead of an error.
+	var lastFolder = settings.get( "folder" ) || ( settings.get( "folders" ) || [] )[ 0 ]
 
-	if ( lastFolder ) lastFolder = lastFolder[ 0 ]
-	else lastFolder = settings.get( "folder" )
-
-	//If we have last folders, we need to make sure that the folder still exists before trying to open it
-	if ( lastFolder )
+	if ( lastFolder && fs.existsSync( lastFolder ) )
 	{
-		fs.stat( `${lastFolder}`, function(err)
-		{
-			if ( !err )
-			{
-				console.log( `Opening Last Folder (${lastFolder})` );
-				services.setFolder( lastFolder )
-			}
-			else if ( err.code === 'ENOENT' )
-			{
-				console.log( `Last folder (${lastFolder}) doesn't exist anymore` );
-				services.setFolder( "" )
-			}
-		});
-	} 
+		console.log( `Opening Last Folder (${lastFolder})` )
+		services.setFolder( lastFolder )
+	}
 	else
 	{
+		if ( lastFolder ) console.log( `Last folder (${lastFolder}) doesn't exist anymore` )
 		services.setFolder( "" )
 	}
 
@@ -131,10 +119,17 @@ function initialize()
 		// handed that Promise to openFolders(), so choosing a drive did nothing.
 		var folders = dialog.showOpenDialogSync( { properties: [ "openDirectory" ] } )
 
-		if ( folders && folders.length > 0 ) settings.set( "folders", folders )
+		if ( folders && folders.length > 0 )
+		{
+			settings.set( "folders", folders )
+			settings.set( "folder", folders[ 0 ] )
+		}
 
 		return services.openFolders( folders )
 	}
+
+	// File > Open Folder... hands the result to the page.
+	menu.initialize( () => mainWindow.webContents.send( "folderOpened", open() ) )
 
 	function browse()
 	{

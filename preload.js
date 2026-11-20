@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld( "teslacam",
 	deleteFolder: folder => ipcRenderer.send( "deleteFolder", folder ),
 	copyFilePaths: filePaths => ipcRenderer.send( "copyFilePaths", filePaths ),
 	copyPath: folderPath => ipcRenderer.send( "copyPath", folderPath ),
-	openExternal: filePath => ipcRenderer.send( "openExternal", filePath )
+	openExternal: filePath => ipcRenderer.send( "openExternal", filePath ),
+	onFolderOpened: callback => ipcRenderer.on( "folderOpened", ( event, args ) => callback( args ) )
 } )

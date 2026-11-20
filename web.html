@@ -10,14 +10,14 @@
   <link rel="stylesheet" href="node_modules/flatpickr/dist/themes/dark.css">
   <link rel="stylesheet" href="node_modules/bootstrap/dist/css/bootstrap.min.css" />
   <link rel="stylesheet" href="node_modules/open-iconic/font/css/open-iconic-bootstrap.css" />
-  <link rel="stylesheet" href="content/app.css" />
-  <link rel="stylesheet" href="content/web.css" />
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="web.css" />
   <script type="text/javascript" src="node_modules/jquery/dist/jquery.min.js"></script>
   <script type="text/javascript" src="node_modules/vue/dist/vue.min.js"></script>
   <script type="text/javascript" src="node_modules/flatpickr/dist/flatpickr.min.js"></script>
-  <script type="text/javascript" src="content/helpers.js"></script>
-  <script type="text/javascript" src="content/hevc.js"></script>
-  <script type="text/javascript" src="content/ui.js"></script>
+  <script type="text/javascript" src="helpers.js"></script>
+  <script type="text/javascript" src="hevc.js"></script>
+  <script type="text/javascript" src="ui.js"></script>
 
 </head>
 
@@ -39,6 +39,31 @@
       <aside class="events">
 
         <div class="toolbar">
+          <div class="folder-row" v-if="!args.locked">
+            <button type="button" class="folder-button" @click="toggleFolders" :title="args.folder"
+              :aria-expanded="showFolders">
+              <span class="oi oi-folder"></span>
+              <span class="name">{{ folderName || "Choose a folder" }}</span>
+              <span class="oi" :class="showFolders ? 'oi-chevron-top' : 'oi-chevron-bottom'"></span>
+            </button>
+          </div>
+          <div class="folders" v-if="showFolders && !args.locked">
+            <div class="crumbs">
+              <template v-for="( f, i ) in args.folderPathParts">
+                <span class="sep" v-if="i > 0 && !/[\\/]$/.test( args.folderPathParts[ i - 1 ].name )">/</span>
+                <a :key="f.path" href="" @click.prevent="openFolder( f.path )"
+                  :class="{ current: i === args.folderPathParts.length - 1 }">{{ f.name }}</a>
+              </template>
+            </div>
+            <a v-for="sub in args.subfolders" :key="sub.path" href="" class="sub"
+              @click.prevent="openFolder( sub.path )"><span class="oi oi-folder"></span> {{ sub.name }}</a>
+            <div class="muted small" v-if="args.subfolders && args.subfolders.length === 0">No folders inside.</div>
+            <div class="actions">
+              <button v-if="canChoose" type="button" class="btn btn-sm btn-outline-light" @click="chooseFolder">
+                Choose with system dialog…</button>
+              <button type="button" class="btn btn-sm btn-primary" @click="showFolders = false">Done</button>
+            </div>
+          </div>
           <div class="filters">
             <button v-for="c in categories" :key="c.name" type="button" class="chip"
               :class="[ 'cat-' + c.name.toLowerCase(), { off: hidden.includes( c.name ) } ]"
@@ -54,8 +79,17 @@
 
         <div class="list" ref="list">
           <div class="empty" v-if="!args.folderInfos">Loading…</div>
+          <div class="empty" v-else-if="!args.folder">
+            Choose the folder that holds your clips: the USB drive from the car, its
+            <code>TeslaCam</code> folder, or a copy of it.
+            <div class="mt-2">
+              <button type="button" class="btn btn-sm btn-primary" @click="canChoose ? chooseFolder() : toggleFolders()">
+                Choose a folder…</button>
+            </div>
+          </div>
           <div class="empty" v-else-if="args.folderInfos.length === 0">
-            No clips found in {{ args.folder || "the clip folder" }}.
+            No clips found in {{ args.folder }}.
+            <span v-if="!args.locked">Pick the USB drive, its <code>TeslaCam</code> folder, or a folder inside it.</span>
           </div>
           <div class="empty" v-else-if="days.length === 0">No events match the filters.</div>
 
@@ -98,6 +132,7 @@
         <details class="hevc-note" v-if="hevc && hevc.supported === false">
           <summary>This browser can't play HEVC (H.265) clips; some cameras may stay blank.</summary>
           {{ hevc.message }}
+          <a v-if="desktop" href="" @click.prevent="openBrowser">Open in your web browser</a>
         </details>
 
         <div class="empty" v-if="!selected">Pick an event from the list.</div>
@@ -147,6 +182,14 @@
               </div>
             </template>
             <div v-else-if="loading == null" class="muted">No event details for this clip.</div>
+            <div class="actions">
+              <button type="button" class="btn btn-sm btn-outline-light" @click="copyPath">
+                {{ copied ? "Copied" : "Copy path" }}</button>
+              <button v-if="canShow" type="button" class="btn btn-sm btn-outline-light" @click="showInFolder">
+                Show in folder</button>
+              <button v-if="canDelete" type="button" class="btn btn-sm btn-outline-danger" @click="deleteEvent">
+                Delete event</button>
+            </div>
             <div class="muted hint">Click a camera to enlarge it.</div>
           </div>
 
@@ -158,7 +201,7 @@
 
   </div>
 
-  <script type="text/javascript" src="content/web.js"></script>
+  <script type="text/javascript" src="web.js"></script>
 
 </body>
 
