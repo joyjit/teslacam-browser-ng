@@ -30,6 +30,7 @@ fs.writeFileSync( path.join( sentry, "event.json" ), JSON.stringify(
 	timestamp: "2024-05-01T19:00:00Z"
 } ) )
 writeClip( track, "2024-05-02_08-14-00-front.mp4" )
+writeClip( sentry, "thumb.png" )
 fs.writeFileSync( path.join( sentry, "event.json.bak" ), "{" )
 
 services.setFolder( root )
@@ -43,6 +44,8 @@ assert.ok( sentryInfo, "SentryClips should be labeled Sentry" )
 assert.strictEqual( sentryInfo.event.reason, "sentry_aware_object_detection" )
 assert.ok( trackInfo, "TrackMode should be labeled Track" )
 assert.strictEqual( trackInfo.event, null )
+assert.strictEqual( sentryInfo.thumb, true, "thumb.png should be flagged" )
+assert.strictEqual( trackInfo.thumb, false )
 
 const files = services.getFiles( sentryInfo.relative, filePath => filePath )
 const cameras = files.clips[ 0 ][ 1 ].map( clip => clip.camera ).sort()

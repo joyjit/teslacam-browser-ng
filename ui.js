@@ -5,36 +5,55 @@
 	else root.ui = factory();
 }( typeof self !== 'undefined' ? self : this, function ()
 {
-    function createVueApp( handlers )
+    // Playback state and logic shared by every page that plays an event:
+    // the clips of the open event (timespans), the one set of controls, the
+    // combined timeline, and the event.json marker.
+    function createPlayerMixin( handlers )
     {
-        var args = { version: null };
-
-        return new Vue(
+        function makeTimespan( key, value )
         {
-            el: '#root',
-            data:
+            var viewOrder = [ "left_repeater", "left_pillar", "front", "right_repeater", "right_pillar", "back", "cabin" ]
+            var views = Array.from( value )
+
+            function cameraRank( camera )
             {
-                args: args,
-                showSidebar: true,
-                showFolders: false,
-                combineClips: true,
-                parsedPath: null,
-                selectedFolder: null,
-                selectedDate: new Date(),
-                times: [],
-                selectedTime: null,
-                selectedPath: null,
-                timespans: [],
-                controls:
-                {
-                    playing: false,
-                    timespan: null,
-                    speed: 1
-                },
-                playing: null,
-                loading: null,
-                eventMeta: null,
-                hevc: null
+                var index = viewOrder.indexOf( camera )
+
+                return index < 0 ? viewOrder.length : index
+            }
+
+            views.sort( ( v1, v2 ) => cameraRank( v1.camera ) - cameraRank( v2.camera ) )
+
+            return {    // Timespan
+                title: key,
+                time: new Date( key ),
+                scrub: 0,
+                playing: false,
+                visible: false,
+                currentTime: 0,
+                duration: null,
+                ended: false,
+                loaded: false,
+                views: views
+            }
+        }
+
+        return {
+            data: function()
+            {
+                return {
+                    combineClips: true,
+                    timespans: [],
+                    controls:
+                    {
+                        playing: false,
+                        timespan: null,
+                        speed: 1
+                    },
+                    loading: null,
+                    eventMeta: null,
+                    hevc: null
+                }
             },
             created: function()
             {
@@ -42,88 +61,6 @@
             },
             watch:
             {
-                selectedFolder: function( folder, oldFolder )
-                {
-                    if ( folder )
-                    {
-                        handlers.openFolder( folder, f => this.args = f )
-                    }
-                },
-                selectedDate: function( newDate, oldDate )
-                {
-                    this.setDate( newDate )
-                },
-                selectedTime: function( newTime, oldTime )
-                {
-                    var index = this.times.indexOf( newTime )
-
-                    if ( index >= 0 && index < this.times.length )
-                    {
-                        var time = this.times[ index ]
-
-                        this.selectedPath = time.time.relative
-                    }
-                    else
-                    {
-                        this.selectedPath = null
-                    }
-                },
-                selectedPath: function( newPath, oldPath )
-                {
-                    function makeTimespan( key, value )
-                    {
-                        var viewOrder = [ "left_repeater", "left_pillar", "front", "right_repeater", "right_pillar", "back", "cabin" ]
-                        var views = Array.from( value )
-
-                        function cameraRank( camera )
-                        {
-                            var index = viewOrder.indexOf( camera )
-
-                            return index < 0 ? viewOrder.length : index
-                        }
-
-                        views.sort( ( v1, v2 ) => cameraRank( v1.camera ) - cameraRank( v2.camera ) )
-
-                        return {    // Timespan
-                            title: key,
-                            time: new Date( key ),
-                            scrub: 0,
-                            playing: false,
-                            visible: false,
-                            currentTime: 0,
-                            duration: null,
-                            ended: false,
-                            loaded: false,
-                            views: views
-                        }
-                    }
-
-                    if ( newPath )
-                    {
-                        handlers.getFiles( newPath, result =>
-                            {
-                                this.timespans = result.clips
-                                    .map( ( [ key, value ] ) => makeTimespan( key, value ) )
-                                this.eventMeta = result.event
-                            } )
-                    }
-                    else
-                    {
-                        this.timespans = []
-                        this.eventMeta = null
-                    }
-                },
-                "args.dates": function( dates, oldDates )
-                {
-                    flatpickr(
-                        $( "#calendar" ),
-                        {
-                            onChange: d => this.selectedDate = d[ 0 ],
-                            enable: dates,
-                            inline: true,
-                            defaultDate: this.selectedDate
-                        } )
-                },
                 "controls.timespan.ended": function( ended, oldEnded )
                 {
                     if ( ended && this.controls.playing )
@@ -214,7 +151,7 @@
                             {
                                 return startTime + Number( timespan.currentTime )
                             }
-    
+
                             startTime += timespan.duration
                         }
                     },
@@ -238,54 +175,23 @@
             },
             methods:
             {
-                openFolders: function()
+                loadEvent: function( newPath )
                 {
-                    // TODO: Still used?
-                    handlers.openFolders( this.loaded )
-                },
-                openBrowser: function()
-                {
-                    handlers.openBrowser()
-                },
-                setDate: function( newDate )
-                {
-                    if ( newDate )
+                    // Load the clips and event.json of one event folder (relative path).
+                    if ( newPath )
                     {
-                        function getTimes( dateGroups, date )
-                        {
-                            var times = []
-                            var timeValues = dateGroups.get( date.toDateString() )
-                    
-                            if ( timeValues )
+                        handlers.getFiles( newPath, result =>
                             {
-                                for ( var time of timeValues )
-                                {
-                                    var name = new Date( time.date ).toLocaleTimeString()
-                    
-                                    if ( time.category ) name += " (" + time.category + ")"
-                                    else if ( time.recent ) name += " (Recent)"
-                    
-                                    times.push( { time: time, name: name } )
-                                }
-                            }
-                    
-                            return times
-                        }
-                    
-                        this.times = getTimes( new Map( this.args.dateGroups ), newDate )
-                        this.selectedTime = ( this.times.length > 0 ) ? this.times[ 0 ] : null
-                        this.selectedPath = ( this.selectedTime ) ? this.selectedTime.time.relative : null
+                                this.timespans = result.clips
+                                    .map( ( [ key, value ] ) => makeTimespan( key, value ) )
+                                this.eventMeta = result.event
+                            } )
                     }
                     else
                     {
-                        this.times = []
-                        this.selectedTime = null
-                        this.selectedPath = null
+                        this.timespans = []
+                        this.eventMeta = null
                     }
-                },
-                loaded: function( args )
-                {
-                    this.args = args
                 },
                 playPause: function( timespan )
                 {
@@ -303,38 +209,6 @@
                     timespan.playing = false
 
                     if ( this.controls ) this.controls.timespan = timespan
-                },
-                deleteFiles: function( timespan )
-                {
-                    var files = timespan.views.map( v => v.filePath )
-
-                    if ( confirm( `Are you sure you want to delete ${files.length} files from ${timespan.title}?` ) )
-                    {
-                        handlers.deleteFiles( files )
-                        handlers.reopenFolders( this.loaded )
-                    }
-                },
-                copyFilePaths: function( timespan )
-                {
-                    var files = timespan.views.map( v => v.filePath )
-
-                    handlers.copyFilePaths( files )
-
-                    alert( "Copied file paths to clipboard" )
-                },
-                deleteFolder: function( folder )
-                {
-                    if ( confirm( `Are you sure you want to delete ${folder}?` ) )
-                    {
-                        handlers.deleteFolder( folder )
-                        handlers.reopenFolders( this.loaded )
-                    }
-                },
-                copyPath: function( path )
-                {
-                    handlers.copyPath( path )
-
-                    alert( "Copied folder path to clipboard" )
                 },
                 eventSeconds: function( timespan )
                 {
@@ -394,6 +268,158 @@
                     time.setSeconds( time.getSeconds() + Number( timespan.currentTime ) )
 
                     return time
+                }
+            }
+        }
+    }
+
+    function createVueApp( handlers )
+    {
+        var args = { version: null };
+
+        return new Vue(
+        {
+            el: '#root',
+            mixins: [ createPlayerMixin( handlers ) ],
+            data:
+            {
+                args: args,
+                showSidebar: true,
+                showFolders: false,
+                parsedPath: null,
+                selectedFolder: null,
+                selectedDate: new Date(),
+                times: [],
+                selectedTime: null,
+                selectedPath: null,
+                playing: null
+            },
+            watch:
+            {
+                selectedFolder: function( folder, oldFolder )
+                {
+                    if ( folder )
+                    {
+                        handlers.openFolder( folder, f => this.args = f )
+                    }
+                },
+                selectedDate: function( newDate, oldDate )
+                {
+                    this.setDate( newDate )
+                },
+                selectedTime: function( newTime, oldTime )
+                {
+                    var index = this.times.indexOf( newTime )
+
+                    if ( index >= 0 && index < this.times.length )
+                    {
+                        var time = this.times[ index ]
+
+                        this.selectedPath = time.time.relative
+                    }
+                    else
+                    {
+                        this.selectedPath = null
+                    }
+                },
+                selectedPath: function( newPath, oldPath )
+                {
+                    this.loadEvent( newPath )
+                },
+                "args.dates": function( dates, oldDates )
+                {
+                    flatpickr(
+                        $( "#calendar" ),
+                        {
+                            onChange: d => this.selectedDate = d[ 0 ],
+                            enable: dates,
+                            inline: true,
+                            defaultDate: this.selectedDate
+                        } )
+                }
+            },
+            methods:
+            {
+                openFolders: function()
+                {
+                    // TODO: Still used?
+                    handlers.openFolders( this.loaded )
+                },
+                openBrowser: function()
+                {
+                    handlers.openBrowser()
+                },
+                setDate: function( newDate )
+                {
+                    if ( newDate )
+                    {
+                        function getTimes( dateGroups, date )
+                        {
+                            var times = []
+                            var timeValues = dateGroups.get( date.toDateString() )
+
+                            if ( timeValues )
+                            {
+                                for ( var time of timeValues )
+                                {
+                                    var name = new Date( time.date ).toLocaleTimeString()
+
+                                    if ( time.category ) name += " (" + time.category + ")"
+                                    else if ( time.recent ) name += " (Recent)"
+
+                                    times.push( { time: time, name: name } )
+                                }
+                            }
+
+                            return times
+                        }
+
+                        this.times = getTimes( new Map( this.args.dateGroups ), newDate )
+                        this.selectedTime = ( this.times.length > 0 ) ? this.times[ 0 ] : null
+                        this.selectedPath = ( this.selectedTime ) ? this.selectedTime.time.relative : null
+                    }
+                    else
+                    {
+                        this.times = []
+                        this.selectedTime = null
+                        this.selectedPath = null
+                    }
+                },
+                loaded: function( args )
+                {
+                    this.args = args
+                },
+                deleteFiles: function( timespan )
+                {
+                    var files = timespan.views.map( v => v.filePath )
+
+                    if ( confirm( `Are you sure you want to delete ${files.length} files from ${timespan.title}?` ) )
+                    {
+                        handlers.deleteFiles( files )
+                        handlers.reopenFolders( this.loaded )
+                    }
+                },
+                copyFilePaths: function( timespan )
+                {
+                    var files = timespan.views.map( v => v.filePath )
+
+                    handlers.copyFilePaths( files )
+
+                    alert( "Copied file paths to clipboard" )
+                },
+                deleteFolder: function( folder )
+                {
+                    if ( confirm( `Are you sure you want to delete ${folder}?` ) )
+                    {
+                        handlers.deleteFolder( folder )
+                        handlers.reopenFolders( this.loaded )
+                    }
+                },
+                copyPath: function( path )
+                {
+                    handlers.copyPath( path )
+
+                    alert( "Copied folder path to clipboard" )
                 }
             }
         });
@@ -678,6 +704,8 @@
     }
 
     return {
-        initialize: initialize
+        initialize: initialize,
+        createPlayerMixin: createPlayerMixin,
+        createVideoComponent: createVideoComponent
     }
 } ) );

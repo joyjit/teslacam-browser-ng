@@ -191,7 +191,8 @@
 								var relative = path.relative( folder, folderPath )
 						
 								var eventMeta = getEventMetadata( folderPath )
-								folderInfos.push( { date: date, path: folderPath, relative: relative, recent: false, event: eventMeta, category: category } )
+								var thumb = fs.existsSync( path.join( folderPath, "thumb.png" ) )
+								folderInfos.push( { date: date, path: folderPath, relative: relative, recent: false, event: eventMeta, category: category, thumb: thumb } )
 							}
 
 							addFolder( match )
@@ -321,7 +322,8 @@
 		expressApp.use( express.json( { limit: "1mb" } ) )
 		expressApp.use( express.urlencoded( { extended: false, limit: "1mb" } ) )
 
-        expressApp.get( "/", ( request, response ) => response.sendFile( __dirname + "/external.html" ) )
+        expressApp.get( "/", ( request, response ) => response.sendFile( __dirname + "/web.html" ) )
+        expressApp.get( "/classic", ( request, response ) => response.sendFile( __dirname + "/external.html" ) )
         expressApp.get( "/openFolders", ( request, response ) => response.send( openFolders() ) )
         expressApp.get( "/reopenFolders", ( request, response ) => response.send( reopenFolders() ) )
         expressApp.get( "/args", ( request, response ) => response.send( args() ) )
