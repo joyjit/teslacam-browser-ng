@@ -54,6 +54,23 @@ docker build -t teslacam-browser .
 docker run --rm -p 8088:8088 -v /path/to/TeslaCam:/media/TeslaCam teslacam-browser
 ```
 
+### Locking the server to one folder
+
+By default the page has a folder list, so anyone using it can open any folder the server can read. To show only the start folder, set `TESLACAM_LOCK_FOLDER=1`. The folder list is hidden, and the server refuses to open any other folder.
+
+```
+TESLACAM_LOCK_FOLDER=1 node server.js /path/to/TeslaCam
+```
+
+In Docker, add `-e TESLACAM_LOCK_FOLDER=1`, or in a compose file:
+
+```
+    environment:
+      TESLACAM_LOCK_FOLDER: "1"
+```
+
+Either way, the server serves videos only from the open folder, and refuses to list or delete anything outside it.
+
 ## HEVC / H.265
 
 HW3 and later firmware store HEVC. The page asks `canPlayType` and `MediaSource.isTypeSupported` for `hvc1` and `hev1`. If the answer is no, a warning is shown instead of a blank player, and a clip that fails to decode shows the same explanation.

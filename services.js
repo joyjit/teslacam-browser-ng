@@ -7,7 +7,39 @@
 {
 	const expressApp = express()
 	var version = "0.0.1"
-	var lastArgs = { version: version, folder: "" }
+	var lastArgs = { version: version, folder: "", locked: false }
+
+	// Locked: the server shows only the folder it was started with (set by
+	// whoever runs it, e.g. in a Docker compose file). No folder picker.
+	var locked = false
+
+	function setLocked( on )
+	{
+		locked = !!on
+		lastArgs.locked = locked
+		console.log( "Folder " + ( locked ? "locked to the start folder" : "picker enabled" ) )
+	}
+
+	function realPath( p )
+	{
+		try { return fs.realpathSync( p ) }
+		catch ( e ) { return path.resolve( p ) }
+	}
+
+	// The absolute path of p, read relative to the open folder, if it is the
+	// open folder or inside it after resolving ".." and symbolic links;
+	// otherwise null.
+	function insideFolder( p )
+	{
+		if ( !lastArgs.folder || typeof p !== "string" ) return null
+
+		var root = realPath( lastArgs.folder )
+		var target = realPath( path.join( root, p ) )
+
+		if ( target === root || target.startsWith( root.endsWith( path.sep ) ? root : root + path.sep ) ) return target
+
+		return null
+	}
 
 	function installRangeHandler()
 	{
@@ -55,15 +87,6 @@
             var folder = folders[ 0 ] + "/"
 
             Object.assign( lastArgs, openFolder( folder ) )
-
-			console.log( `OBSOLETE?: Serving content from ${folder}` )
-
-			expressApp.use(
-				"/videos",
-				express.static( folder ),
-				serveIndex( folder, { 'icons': true } ) )
-
-			installRangeHandler()
 		}
 
 		return lastArgs
@@ -156,6 +179,7 @@
 				parsedFolder: path.parse( "" ),
 				folderPathParts: [],
 				subfolders: [],
+				locked: locked,
 				version: version
 			}
 		}
@@ -297,27 +321,53 @@
             parsedFolder: parsedFolder,
 			folderPathParts: folderPathParts,
 			subfolders: subfolders,
+			locked: locked,
 			version: version
         }
     }
 
     function initializeExpress( port )
     {
+		var startFolder = lastArgs.folder
+
 		function serveVideos( args )
 		{
 			lastArgs = args
 
 			console.log( ` ${args.folder}` )
 
-			expressApp.use(
-				"/videos",
-				express.static( args.folder ),
-				serveIndex( args.folder, { 'icons': true } ) )
-
-			installRangeHandler()
-
 			return args
 		}
+
+		function samePath( a, b )
+		{
+			return realPath( a ) === realPath( b )
+		}
+
+		function refuse( response, message )
+		{
+			response.status( 403 ).type( "txt" ).send( message )
+		}
+
+		// Videos and thumbnails come from the open folder only. One handler that
+		// follows the open folder, instead of a new one for every folder opened.
+		var videoFolder = null
+		var videoHandlers = []
+
+		expressApp.use( "/videos", ( request, response, next ) =>
+		{
+			if ( !lastArgs.folder ) return next()
+
+			if ( videoFolder !== lastArgs.folder )
+			{
+				videoFolder = lastArgs.folder
+				videoHandlers = [ express.static( videoFolder ), serveIndex( videoFolder, { 'icons': true } ) ]
+			}
+
+			videoHandlers[ 0 ]( request, response, err => err ? next( err ) : videoHandlers[ 1 ]( request, response, next ) )
+		} )
+
+		installRangeHandler()
 
 		expressApp.use( express.json( { limit: "1mb" } ) )
 		expressApp.use( express.urlencoded( { extended: false, limit: "1mb" } ) )
@@ -328,16 +378,56 @@
         expressApp.get( "/reopenFolders", ( request, response ) => response.send( reopenFolders() ) )
         expressApp.get( "/args", ( request, response ) => response.send( args() ) )
         expressApp.get( "/openDefaultFolder", ( request, response ) => response.send( serveVideos( openFolder() ) ) )
-        expressApp.use( "/openFolder", ( request, response ) => response.send( serveVideos( openFolder( decodeURIComponent( request.path ) ) ) ) )
+        expressApp.use( "/openFolder", ( request, response ) =>
+		{
+			var folder = decodeURIComponent( request.path )
+
+			if ( locked && !samePath( folder, startFolder ) ) return refuse( response, "The folder is locked" )
+
+			response.send( serveVideos( openFolder( folder ) ) )
+		} )
         expressApp.use( "/copyFilePaths", ( request, response ) => response.send( copyFilePaths( decodeURIComponent( request.path ) ) ) )
         expressApp.use( "/copyPath", ( request, response ) => response.send( copyPath( decodeURIComponent( request.path ) ) ) )
-        expressApp.use( "/files", ( request, response ) => response.send( getFiles( decodeURIComponent( request.path ), p => "videos/" + p ) ) )
+        expressApp.use( "/files", ( request, response ) =>
+		{
+			var folder = decodeURIComponent( request.path )
 
-        expressApp.post( "/deleteFiles", ( request, response ) => deleteFiles( request.body ) )
-        expressApp.post( "/deleteFolder", ( request, response ) => deleteFolder( request.body ) )
+			if ( insideFolder( folder ) == null ) return refuse( response, "Outside the open folder" )
+
+			response.send( getFiles( folder, p => "videos/" + p ) )
+		} )
+
+        expressApp.post( "/deleteFiles", ( request, response ) =>
+		{
+			// Paths as the page has them: relative to the open folder.
+			var files = ( Array.isArray( request.body ) ? request.body : [] ).map( insideFolder )
+
+			if ( files.length < 1 || files.includes( null ) ) return refuse( response, "Outside the open folder" )
+
+			deleteFiles( files )
+			response.sendStatus( 204 )
+		} )
+        expressApp.post( "/deleteFolder", ( request, response ) =>
+		{
+			var folder = typeof request.body === "string" ? request.body : request.body && request.body.folder
+
+			var target = insideFolder( folder )
+
+			// Never the open folder itself, only an event folder inside it.
+			if ( target == null || samePath( target, lastArgs.folder ) )
+			{
+				return refuse( response, "Outside the open folder" )
+			}
+
+			deleteFolder( folder )
+			response.sendStatus( 204 )
+		} )
 
         expressApp.use( "/content", express.static( __dirname ) )
         expressApp.use( "/node_modules", express.static( __dirname + "/node_modules" ) )
+        // The new page uses plain relative paths (web.css, ui.js), so the same
+        // file works from disk in the desktop app and from this server.
+        expressApp.use( "/", express.static( __dirname, { index: false } ) )
 
         expressApp.listen( port, ( err ) =>
         {
@@ -353,6 +443,8 @@
 	return {
 		setVersion: setVersion,
 		setFolder: setFolder,
+		setLocked: setLocked,
+		insideFolder: insideFolder,
         openFolders: openFolders,
         reopenFolders: reopenFolders,
         openFolder: openFolder,
