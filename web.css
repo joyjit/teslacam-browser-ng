@@ -380,6 +380,65 @@ code { color: var(--text); }
 .muted { color: var(--muted); }
 .hint { font-size: 0.8rem; }
 
+/* Notes and Keep (TeslaUSB mode) */
+
+:root { --keep: #e3b341; }
+
+.mode-tag
+{
+	padding: 0 0.45rem;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	color: var(--muted);
+	font-size: 0.75rem;
+}
+
+.chip.kept { --chip: #9e6a03; }
+.kept-mark { color: var(--keep); font-size: 0.8rem; }
+.note-mark { color: var(--muted); font-size: 0.75rem; }
+
+.info .note-line
+{
+	font-size: 0.85rem;
+	color: var(--text);
+	font-style: italic;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.keep-button
+{
+	margin-left: auto;
+	padding: 0.1rem 0.6rem;
+	background: transparent;
+	color: var(--muted);
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	font-size: 0.85rem;
+}
+
+.keep-button.on { color: var(--bg); background: var(--keep); border-color: var(--keep); }
+
+.notes { display: grid; gap: 0.25rem; margin-top: 0.3rem; }
+.notes label { margin: 0; color: var(--muted); font-size: 0.85rem; }
+
+.notes textarea
+{
+	width: 100%;
+	max-width: 48rem;
+	padding: 0.4rem 0.55rem;
+	background: var(--panel);
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	resize: vertical;
+}
+
+.notes textarea:focus { outline: none; border-color: var(--accent); }
+.note-status { min-height: 1.1rem; color: var(--muted); font-size: 0.8rem; }
+.note-status.error { color: var(--sentry); }
+
 /* Phone: the list, then the player on its own screen. */
 
 @media ( max-width: 767.98px )

@@ -38,6 +38,16 @@
 			getFiles: ( p, done ) => $.getJSON( "files/" + encodePath( p ), done ),
 			fileUrl: ( args, relative ) => "videos/" + encodePath( relative ),
 			copyPath: ( args, relative ) => navigator.clipboard && navigator.clipboard.writeText( joinPath( args.folder, relative ) ),
+			getNotes: done => $.getJSON( "notes", done ),
+			saveNote: ( relative, note, done, fail ) => $.ajax(
+				{
+					url: "notes/" + encodePath( relative ),
+					method: "PUT",
+					contentType: "application/json",
+					data: JSON.stringify( note ),
+					success: r => done( r.note ),
+					error: x => fail( x.responseText || x.statusText || "No answer from the server" )
+				} ),
 			openBrowser: () => {},
 			openExternal: () => {}
 		}
@@ -164,10 +174,25 @@
 			canDelete: !!handlers.deleteFolder,
 			canChoose: !!handlers.chooseFolder,
 			canShow: !!handlers.showInFolder,
-			copied: false
+			copied: false,
+			notes: {},
+			onlyKept: false,
+			noteText: "",
+			noteKeep: false,
+			noteStatus: "",
+			noteTimer: null,
+			noteKey: null
 		},
 		computed:
 		{
+			"args.notes.enabled": function( on )
+			{
+				if ( on && handlers.getNotes ) handlers.getNotes( r =>
+				{
+					this.notes = r.notes || {}
+					this.showNote( this.selected )
+				} )
+			},
 			events: function()
 			{
 				return ( this.args.folderInfos || [] )
@@ -195,6 +220,7 @@
 				for ( var e of this.events )
 				{
 					if ( this.hidden.includes( this.categoryOf( e ) ) ) continue
+					if ( this.onlyKept && !( this.noteOf( e ) && this.noteOf( e ).keep ) ) continue
 
 					var key = new Date( e.date ).toDateString()
 					var day = byKey.get( key )
@@ -217,6 +243,18 @@
 
 				return time ? time.toLocaleTimeString() : "--:--:--"
 			},
+			notesOn: function()
+			{
+				return !!( this.args.notes && this.args.notes.enabled && handlers.getNotes )
+			},
+			notesWritable: function()
+			{
+				return this.notesOn && this.args.notes.writable
+			},
+			keptCount: function()
+			{
+				return this.events.filter( e => this.noteOf( e ) && this.noteOf( e ).keep ).length
+			},
 			folderName: function()
 			{
 				var parts = this.args.folderPathParts || []
@@ -237,6 +275,14 @@
 		},
 		watch:
 		{
+			"args.notes.enabled": function( on )
+			{
+				if ( on && handlers.getNotes ) handlers.getNotes( r =>
+				{
+					this.notes = r.notes || {}
+					this.showNote( this.selected )
+				} )
+			},
 			events: function()
 			{
 				this.selectFromHash()
@@ -249,6 +295,8 @@
 				this.focus = null
 				this.controls.playing = false
 				this.loadEvent( e ? e.relative : null )
+				this.flushNote()
+				this.showNote( e )
 			}
 		},
 		created: function()
@@ -276,6 +324,69 @@
 			thumbUrl: function( e )
 			{
 				return handlers.fileUrl( this.args, e.relative + "/thumb.png" )
+			},
+			noteOf: function( e )
+			{
+				return e ? this.notes[ e.relative ] || null : null
+			},
+			showNote: function( e )
+			{
+				var note = this.noteOf( e )
+
+				this.noteText = note ? note.text : ""
+				this.noteKeep = note ? note.keep : false
+				this.noteStatus = this.noteSummary( note )
+			},
+			noteSummary: function( note )
+			{
+				if ( !note ) return ""
+
+				var when = new Date( note.at ).toLocaleString( [], { dateStyle: "medium", timeStyle: "short" } )
+
+				return "Last edited " + ( note.by ? "by " + note.by + ", " : "" ) + when
+			},
+			noteInput: function()
+			{
+				// Save a moment after typing stops, and on leaving the box.
+				clearTimeout( this.noteTimer )
+				this.noteKey = this.selected.relative
+				this.noteStatus = "Not saved yet…"
+				this.noteTimer = setTimeout( () => this.flushNote(), 800 )
+			},
+			toggleKeep: function()
+			{
+				if ( !this.notesWritable || !this.selected ) return
+
+				this.noteKeep = !this.noteKeep
+				this.noteKey = this.selected.relative
+				this.flushNote()
+			},
+			flushNote: function()
+			{
+				clearTimeout( this.noteTimer )
+				this.noteTimer = null
+
+				var key = this.noteKey
+
+				if ( !key ) return
+
+				this.noteKey = null
+
+				var note = { text: this.noteText, keep: this.noteKeep }
+
+				this.noteStatus = "Saving…"
+				handlers.saveNote( key, note,
+					saved =>
+					{
+						if ( saved ) this.$set( this.notes, key, saved )
+						else this.$delete( this.notes, key )
+
+						if ( this.selected && this.selected.relative === key ) this.noteStatus = saved ? this.noteSummary( saved ) : ""
+					},
+					message =>
+					{
+						if ( this.selected && this.selected.relative === key ) this.noteStatus = "Couldn't save: " + message
+					} )
 			},
 			openFolder: function( folder )
 			{

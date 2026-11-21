@@ -28,6 +28,7 @@
     <header class="topbar">
       <a class="brand" href="./">TeslaCam Browser NG</a>
       <span class="version">{{ args.version }}</span>
+      <span class="mode-tag" v-if="args.mode === 'teslausb'">TeslaUSB mode</span>
       <span class="credits">
         Based on <a href="https://github.com/BobStrogg/teslacam-browser" target="_blank"
           rel="noopener">TeslaCam Browser</a> by Chris Cavanagh. Not affiliated with Tesla.
@@ -65,6 +66,10 @@
             </div>
           </div>
           <div class="filters">
+            <button v-if="notesOn" type="button" class="chip kept" :class="{ off: !onlyKept }" :aria-pressed="onlyKept"
+              @click="onlyKept = !onlyKept" title="Show only events you starred">
+              <span class="oi oi-star"></span> Kept <span class="count">{{ keptCount }}</span>
+            </button>
             <button v-for="c in categories" :key="c.name" type="button" class="chip"
               :class="[ 'cat-' + c.name.toLowerCase(), { off: hidden.includes( c.name ) } ]"
               :aria-pressed="!hidden.includes( c.name )" @click="toggleCategory( c.name )">
@@ -103,7 +108,10 @@
                 <div class="line1">
                   <span class="time">{{ timeText( e.date ) }}</span>
                   <span class="badge" :class="'cat-' + categoryOf( e ).toLowerCase()">{{ categoryOf( e ) }}</span>
+                  <span v-if="noteOf( e ) && noteOf( e ).keep" class="oi oi-star kept-mark" title="Kept"></span>
+                  <span v-if="noteOf( e ) && noteOf( e ).text.trim()" class="oi oi-document note-mark" title="Has a note"></span>
                 </div>
+                <div class="note-line" v-if="noteOf( e ) && noteOf( e ).text.trim()">{{ noteOf( e ).text }}</div>
                 <div class="reason" v-if="e.event && e.event.reason">{{ words( e.event.reason ) }}</div>
                 <div class="place" v-if="placeOf( e.event )">{{ placeOf( e.event ) }}</div>
               </div>
@@ -127,6 +135,11 @@
           <span v-if="selected" class="badge" :class="'cat-' + categoryOf( selected ).toLowerCase()">
             {{ categoryOf( selected ) }}</span>
           <span v-if="selected" class="when">{{ dateText( selected.date ) }} {{ timeText( selected.date ) }}</span>
+          <button v-if="selected && notesOn" type="button" class="keep-button" :class="{ on: noteKeep }"
+            :disabled="!notesWritable" @click="toggleKeep" :aria-pressed="noteKeep"
+            :title="noteKeep ? 'Kept: click to unstar' : 'Keep: star this event'">
+            <span class="oi oi-star"></span> {{ noteKeep ? "Kept" : "Keep" }}
+          </button>
         </div>
 
         <details class="hevc-note" v-if="hevc && hevc.supported === false">
@@ -182,6 +195,13 @@
               </div>
             </template>
             <div v-else-if="loading == null" class="muted">No event details for this clip.</div>
+            <div class="notes" v-if="notesOn">
+              <label for="note">Notes</label>
+              <textarea id="note" rows="3" v-model="noteText" :disabled="!notesWritable"
+                placeholder="What happened? Who was it?" @input="noteInput" @blur="flushNote"></textarea>
+              <div class="note-status" :class="{ error: noteStatus.startsWith( 'Couldn' ) }">
+                {{ notesWritable ? noteStatus : args.notes.error }}</div>
+            </div>
             <div class="actions">
               <button type="button" class="btn btn-sm btn-outline-light" @click="copyPath">
                 {{ copied ? "Copied" : "Copy path" }}</button>

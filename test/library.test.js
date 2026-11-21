@@ -129,4 +129,36 @@ const empty = services.openFolder( "" )
 assert.strictEqual( empty.folder, "" )
 assert.deepStrictEqual( empty.folderInfos, [] )
 
+// TeslaUSB mode: notes are kept in <folder>/.teslacam-browser/notes.json.
+assert.throws( () => services.setMode( "nope" ), /Unknown mode/ )
+services.setFolder( root )
+services.setMode( "" )
+assert.strictEqual( services.getNotes().enabled, false )
+assert.throws( () => services.saveNote( "SentryClips/x", { text: "hi" } ), /off/ )
+
+services.setMode( "teslausb" )
+assert.strictEqual( services.openFolder( root ).locked, true )
+assert.strictEqual( services.getNotes().writable, true )
+
+const savedNote = services.saveNote( "/TeslaCam/SentryClips/2024-05-01_12-00-00", { text: "Bike near car", keep: true }, "joyjit" )
+assert.strictEqual( savedNote.by, "joyjit" )
+assert.strictEqual( savedNote.keep, true )
+
+// Read back from disk.
+services.setMode( "teslausb" )
+const reloaded = services.getNotes().notes[ "TeslaCam/SentryClips/2024-05-01_12-00-00" ]
+assert.strictEqual( reloaded.text, "Bike near car" )
+
+// Empty and not kept: removed.
+assert.strictEqual( services.saveNote( "TeslaCam/SentryClips/2024-05-01_12-00-00", { text: " ", keep: false } ), null )
+assert.deepStrictEqual( services.getNotes().notes, {} )
+
+// A file that can't be read is never overwritten.
+fs.writeFileSync( path.join( root, ".teslacam-browser", "notes.json" ), "{" )
+services.setMode( "teslausb" )
+assert.strictEqual( services.getNotes().writable, false )
+assert.throws( () => services.saveNote( "TeslaCam/SentryClips/x", { text: "hi" } ), /Can't read/ )
+assert.strictEqual( fs.readFileSync( path.join( root, ".teslacam-browser", "notes.json" ), "utf8" ), "{" )
+services.setMode( "" )
+
 console.log( "library tests passed" )

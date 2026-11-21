@@ -54,22 +54,26 @@ docker build -t teslacam-browser .
 docker run --rm -p 8088:8088 -v /path/to/TeslaCam:/media/TeslaCam teslacam-browser
 ```
 
-### Locking the server to one folder
+### TeslaUSB mode: a fixed clip archive, with notes
 
-By default the page has a folder list, so anyone using it can open any folder the server can read. To show only the start folder, set `TESLACAM_LOCK_FOLDER=1`. The folder list is hidden, and the server refuses to open any other folder.
+By default the page has a folder list, so anyone using it can open any folder the server can read. For a server that holds one clip archive, for example clips uploaded by [TeslaUSB](https://github.com/marcone/teslausb), set `TESLACAM_MODE=teslausb`:
+
+- Only the start folder is shown. The folder list is hidden, and the server refuses to open any other folder.
+- Each event can have a note and a Keep star. Notes are kept in `.teslacam-browser/notes.json` inside the clip folder, so that folder (or at least `.teslacam-browser` in it) must be writable. If it isn't, the page still works and says why notes can't be saved.
+- If a login proxy in front of the server sends a `Remote-User` header (Authelia does), each note records who last edited it. Only trust this when the server can't be reached except through that proxy.
 
 ```
-TESLACAM_LOCK_FOLDER=1 node server.js /path/to/TeslaCam
+TESLACAM_MODE=teslausb node server.js /path/to/TeslaCam
 ```
 
-In Docker, add `-e TESLACAM_LOCK_FOLDER=1`, or in a compose file:
+In Docker, add `-e TESLACAM_MODE=teslausb`, or in a compose file:
 
 ```
     environment:
-      TESLACAM_LOCK_FOLDER: "1"
+      TESLACAM_MODE: teslausb
 ```
 
-Either way, the server serves videos only from the open folder, and refuses to list or delete anything outside it.
+In every mode, the server serves videos only from the open folder, and refuses to list or delete anything outside it.
 
 ## HEVC / H.265
 

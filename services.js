@@ -7,17 +7,110 @@
 {
 	const expressApp = express()
 	var version = "0.0.1"
-	var lastArgs = { version: version, folder: "", locked: false }
+	var lastArgs = { version: version, folder: "", locked: false, mode: "" }
 
-	// Locked: the server shows only the folder it was started with (set by
-	// whoever runs it, e.g. in a Docker compose file). No folder picker.
+	// Modes, set by whoever runs the server (e.g. in a Docker compose file):
+	// ""        the default: the page has a folder list, no notes.
+	// teslausb  a fixed clip archive (e.g. uploaded by TeslaUSB): only the start
+	//           folder (no folder list), and notes per event.
+	var modes = [ "", "teslausb" ]
+	var mode = ""
 	var locked = false
 
-	function setLocked( on )
+	function setMode( m )
 	{
-		locked = !!on
+		m = String( m || "" ).trim().toLowerCase()
+
+		if ( !modes.includes( m ) ) throw new Error( `Unknown mode "${m}"; use one of: ${modes.filter( Boolean ).join( ", " )}` )
+
+		mode = m
+		locked = ( mode === "teslausb" )
 		lastArgs.locked = locked
-		console.log( "Folder " + ( locked ? "locked to the start folder" : "picker enabled" ) )
+		lastArgs.mode = mode
+		console.log( "Mode: " + ( mode || "default (folder list)" ) )
+
+		if ( mode === "teslausb" ) loadNotes()
+	}
+
+	// Notes (TeslaUSB mode): one JSON file in a hidden folder at the top of the
+	// clip folder, keyed by the event's folder path (e.g.
+	// "SentryClips/2026-11-19_15-30-11"), which comes from the event's time and
+	// so stays the same in every copy of the clips.
+	var notes = {}
+	var notesError = null
+
+	function notesFile()
+	{
+		return path.join( lastArgs.folder, ".teslacam-browser", "notes.json" )
+	}
+
+	function loadNotes()
+	{
+		notes = {}
+		notesError = null
+
+		var file = notesFile()
+
+		try
+		{
+			if ( fs.existsSync( file ) ) notes = JSON.parse( fs.readFileSync( file, "utf8" ) ).notes || {}
+		}
+		catch ( e )
+		{
+			// Never overwrite a file we could not read.
+			notesError = `Can't read ${file}: ${e.message}`
+			console.error( notesError )
+			return
+		}
+
+		try
+		{
+			fs.mkdirSync( path.dirname( file ), { recursive: true } )
+			fs.accessSync( path.dirname( file ), fs.constants.W_OK )
+		}
+		catch ( e )
+		{
+			notesError = `Notes can't be saved: ${path.dirname( file )} is not writable`
+			console.error( notesError )
+		}
+	}
+
+	function notesState()
+	{
+		return { enabled: mode === "teslausb", writable: mode === "teslausb" && !notesError, error: notesError }
+	}
+
+	function getNotes()
+	{
+		return Object.assign( { notes: notes }, notesState() )
+	}
+
+	// Save one event's note; an empty note without Keep removes it.
+	function saveNote( relative, note, user )
+	{
+		if ( !notesState().writable ) throw new Error( notesError || "Notes are off" )
+
+		var key = String( relative ).replace( /^[\\/]+/, "" )
+		var text = String( note && note.text || "" )
+		var keep = !!( note && note.keep )
+
+		if ( text.length > 20000 ) throw new Error( "Note too long" )
+
+		var next = Object.assign( {}, notes )
+
+		if ( text.trim() || keep ) next[ key ] = { text: text, keep: keep, by: user || null, at: new Date().toISOString() }
+		else delete next[ key ]
+
+		// Write a new file, then swap it in, so a crash never leaves half a file.
+		var file = notesFile()
+		var temp = file + ".tmp"
+
+		fs.writeFileSync( temp, JSON.stringify( { version: 1, notes: next }, null, 1 ) )
+		fs.renameSync( temp, file )
+
+		notes = next
+
+		return notes[ key ] || null
 	}
 
 	function realPath( p )
@@ -180,6 +273,8 @@
 				folderPathParts: [],
 				subfolders: [],
 				locked: locked,
+				mode: mode,
+				notes: notesState(),
 				version: version
 			}
 		}
@@ -322,6 +417,8 @@
 			folderPathParts: folderPathParts,
 			subfolders: subfolders,
 			locked: locked,
+			mode: mode,
+			notes: notesState(),
 			version: version
         }
     }
@@ -423,6 +520,26 @@
 			response.sendStatus( 204 )
 		} )
 
+        // Notes (TeslaUSB mode). Who wrote a note comes from the login in front
+        // of the server (Authelia's Remote-User header), if there is one.
+        expressApp.get( "/notes", ( request, response ) => response.send( getNotes() ) )
+        expressApp.put( /^\/notes\/(.+)$/, ( request, response ) =>
+		{
+			var relative = decodeURIComponent( request.params[ 0 ] )
+			var target = insideFolder( relative )
+
+			if ( target == null || samePath( target, lastArgs.folder ) ) return refuse( response, "Outside the open folder" )
+
+			try
+			{
+				response.send( { note: saveNote( relative, request.body, request.get( "Remote-User" ) ) } )
+			}
+			catch ( e )
+			{
+				response.status( 500 ).type( "txt" ).send( e.message )
+			}
+		} )
+
         expressApp.use( "/content", express.static( __dirname ) )
         expressApp.use( "/node_modules", express.static( __dirname + "/node_modules" ) )
         // The new page uses plain relative paths (web.css, ui.js), so the same
@@ -443,7 +560,9 @@
 	return {
 		setVersion: setVersion,
 		setFolder: setFolder,
-		setLocked: setLocked,
+		setMode: setMode,
+		getNotes: getNotes,
+		saveNote: saveNote,
 		insideFolder: insideFolder,
         openFolders: openFolders,
         reopenFolders: reopenFolders,
