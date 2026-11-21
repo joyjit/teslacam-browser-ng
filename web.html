@@ -65,6 +65,23 @@
               <button type="button" class="btn btn-sm btn-primary" @click="showFolders = false">Done</button>
             </div>
           </div>
+          <div class="folders trash-panel" v-if="showTrash && trashOn">
+            <div class="crumbs"><strong>Trash</strong>
+              <span class="muted small">· kept {{ args.trash.days }} days, then removed for good</span></div>
+            <div class="muted small" v-if="trashItems.length === 0">The trash is empty.</div>
+            <div v-for="item in trashItems" :key="item.id" class="trash-item">
+              <div class="what">{{ trashLabel( item ) }}</div>
+              <div class="muted small">{{ trashInfo( item ) }}</div>
+              <div class="actions">
+                <button type="button" class="btn btn-sm btn-outline-light" @click="restoreItem( item )">Restore</button>
+                <button type="button" class="btn btn-sm btn-outline-danger" @click="purgeItem( item )">Delete now</button>
+              </div>
+            </div>
+            <div class="note-status error" v-if="trashMessage">{{ trashMessage }}</div>
+            <div class="actions">
+              <button type="button" class="btn btn-sm btn-primary" @click="showTrash = false">Done</button>
+            </div>
+          </div>
           <div class="filters">
             <button v-if="notesOn" type="button" class="chip kept" :class="{ off: !onlyKept }" :aria-pressed="onlyKept"
               @click="onlyKept = !onlyKept" title="Show only events you starred">
@@ -76,9 +93,12 @@
               {{ c.name }} <span class="count">{{ c.count }}</span>
             </button>
           </div>
-          <div class="jump" title="Jump to a day">
-            <span class="oi oi-calendar"></span>
-            <input ref="jump" type="text" placeholder="Jump to day" readonly>
+          <div class="jump">
+            <span class="oi oi-calendar" title="Jump to a day"></span>
+            <input ref="jump" type="text" placeholder="Jump to day" readonly aria-label="Jump to a day">
+            <button v-if="trashOn" type="button" class="trash-button" @click="showTrash = !showTrash"
+              :aria-expanded="showTrash"><span class="oi oi-trash"></span> Trash
+              <span class="count" v-if="trashItems.length">{{ trashItems.length }}</span></button>
           </div>
         </div>
 

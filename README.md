@@ -59,8 +59,9 @@ docker run --rm -p 8088:8088 -v /path/to/TeslaCam:/media/TeslaCam teslacam-brows
 By default the page has a folder list, so anyone using it can open any folder the server can read. For a server that holds one clip archive, for example clips uploaded by [TeslaUSB](https://github.com/marcone/teslausb), set `TESLACAM_MODE=teslausb`:
 
 - Only the start folder is shown. The folder list is hidden, and the server refuses to open any other folder.
-- Each event can have a note and a Keep star. Notes are kept in `.teslacam-browser/notes.json` inside the clip folder, so that folder (or at least `.teslacam-browser` in it) must be writable. If it isn't, the page still works and says why notes can't be saved.
-- If a login proxy in front of the server sends a `Remote-User` header (Authelia does), each note records who last edited it. Only trust this when the server can't be reached except through that proxy.
+- Each event can have a note and a Keep star. Notes are kept in `.teslacam-browser/notes.json` inside the clip folder, so the server needs write access to that folder. If it can't write, the page still works and says why.
+- Delete moves a whole event to `.teslacam-browser/trash` inside the clip folder. It can be restored from the page for 30 days, then it is removed for good. Only event folders can be deleted, never `SentryClips` or the clip folder itself.
+- If a login proxy in front of the server sends a `Remote-User` header (Authelia does), each note and deleted event records who did it. Only trust this when the server can't be reached except through that proxy.
 
 ```
 TESLACAM_MODE=teslausb node server.js /path/to/TeslaCam

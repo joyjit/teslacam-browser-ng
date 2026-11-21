@@ -439,6 +439,24 @@ code { color: var(--text); }
 .note-status { min-height: 1.1rem; color: var(--muted); font-size: 0.8rem; }
 .note-status.error { color: var(--sentry); }
 
+/* Trash (TeslaUSB mode) */
+
+.trash-button
+{
+	margin-left: auto;
+	padding: 0.1rem 0.55rem;
+	background: transparent;
+	color: var(--muted);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	font-size: 0.85rem;
+}
+
+.trash-button .count { color: var(--text); }
+.trash-item { padding: 0.4rem 0; border-top: 1px solid var(--line); }
+.trash-item .what { font-weight: 600; }
+.trash-item .actions { margin-top: 0.3rem; }
+
 /* Phone: the list, then the player on its own screen. */
 
 @media ( max-width: 767.98px )

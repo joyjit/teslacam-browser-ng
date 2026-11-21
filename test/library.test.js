@@ -153,6 +153,43 @@ assert.strictEqual( reloaded.text, "Bike near car" )
 assert.strictEqual( services.saveNote( "TeslaCam/SentryClips/2024-05-01_12-00-00", { text: " ", keep: false } ), null )
 assert.deepStrictEqual( services.getNotes().notes, {} )
 
+// Trash: Delete moves an event folder away; it can be restored or removed.
+const doomed = path.join( root, "TeslaCam", "SentryClips", "2024-07-01_10-00-00" )
+writeClip( doomed, "2024-07-01_09-59-00-front.mp4" )
+services.saveNote( "TeslaCam/SentryClips/2024-07-01_10-00-00", { text: "note survives a restore" } )
+
+assert.throws( () => services.trashEvent( "TeslaCam/SentryClips", "joyjit" ), /Not an event folder/ )
+assert.throws( () => services.trashEvent( "", "joyjit" ), /Not an event folder/ )
+assert.throws( () => services.trashEvent( "../..", "joyjit" ), /Not an event folder/ )
+
+const trashed = services.trashEvent( "TeslaCam/SentryClips/2024-07-01_10-00-00", "preetha" )
+assert.strictEqual( fs.existsSync( doomed ), false )
+assert.strictEqual( trashed.by, "preetha" )
+assert.strictEqual( services.listTrash().length, 1 )
+assert.ok( !services.openFolder( root ).folderInfos.some( i => i.relative.endsWith( "2024-07-01_10-00-00" ) ), "trashed event leaves the list" )
+assert.throws( () => services.restoreTrash( "../../etc" ), /Not in the trash/ )
+
+services.restoreTrash( trashed.id )
+assert.ok( fs.existsSync( path.join( doomed, "2024-07-01_09-59-00-front.mp4" ) ) )
+assert.strictEqual( services.listTrash().length, 0 )
+assert.strictEqual( services.getNotes().notes[ "TeslaCam/SentryClips/2024-07-01_10-00-00" ].text, "note survives a restore" )
+
+// Removing for good takes the note with it.
+const again = services.trashEvent( "TeslaCam/SentryClips/2024-07-01_10-00-00", "joyjit" )
+services.purgeTrash( again.id )
+assert.strictEqual( services.listTrash().length, 0 )
+assert.strictEqual( services.getNotes().notes[ "TeslaCam/SentryClips/2024-07-01_10-00-00" ], undefined )
+
+// Entries older than the limit are removed automatically.
+writeClip( doomed, "2024-07-01_09-59-00-front.mp4" )
+const old = services.trashEvent( "TeslaCam/SentryClips/2024-07-01_10-00-00", "joyjit" )
+const infoFile = path.join( root, ".teslacam-browser", "trash", old.id, "info.json" )
+const info = JSON.parse( fs.readFileSync( infoFile, "utf8" ) )
+info.deletedAt = new Date( Date.now() - 31 * 86400000 ).toISOString()
+fs.writeFileSync( infoFile, JSON.stringify( info ) )
+services.purgeOldTrash()
+assert.strictEqual( services.listTrash().length, 0 )
+
 // A file that can't be read is never overwritten.
 fs.writeFileSync( path.join( root, ".teslacam-browser", "notes.json" ), "{" )
 services.setMode( "teslausb" )

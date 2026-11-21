@@ -29,7 +29,16 @@
 		lastArgs.mode = mode
 		console.log( "Mode: " + ( mode || "default (folder list)" ) )
 
-		if ( mode === "teslausb" ) loadNotes()
+		clearInterval( trashTimer )
+		trashTimer = null
+
+		if ( mode === "teslausb" )
+		{
+			loadNotes()
+			purgeOldTrash()
+			trashTimer = setInterval( purgeOldTrash, 6 * 3600 * 1000 )
+			trashTimer.unref()
+		}
 	}
 
 	// Notes (TeslaUSB mode): one JSON file in a hidden folder at the top of the
@@ -113,10 +122,153 @@
 		return notes[ key ] || null
 	}
 
+	// Trash (TeslaUSB mode): Delete moves an event folder to
+	// <folder>/.teslacam-browser/trash/<id>/<event path>, with info.json next
+	// to it. It can be restored for trashDays days, then it is removed.
+	var trashDays = 30
+	var trashTimer = null
+
+	function trashState()
+	{
+		return { enabled: mode === "teslausb", days: trashDays }
+	}
+
+	function trashFolder()
+	{
+		return path.join( lastArgs.folder, ".teslacam-browser", "trash" )
+	}
+
+	function eventKey( relative )
+	{
+		return String( relative ).replace( /\\/g, "/" ).replace( /^\/+|\/+$/g, "" )
+	}
+
+	// Only event folders (named like 2026-11-19_15-30-11) inside the open
+	// folder can be deleted: never SentryClips, RecentClips or the folder itself.
+	function eventFolder( relative )
+	{
+		var target = insideFolder( relative )
+
+		if ( target == null || samePath( target, lastArgs.folder ) ) return null
+		if ( !helpers.matchFolder( path.basename( target ) ) ) return null
+
+		try { return fs.lstatSync( target ).isDirectory() ? target : null }
+		catch ( e ) { return null }
+	}
+
+	function trashEntry( id )
+	{
+		// Ids are made here (see trashEvent); anything else is refused.
+		if ( !/^[0-9A-Za-z-]+$/.test( String( id ) ) ) return null
+
+		try
+		{
+			var info = JSON.parse( fs.readFileSync( path.join( trashFolder(), id, "info.json" ), "utf8" ) )
+			var purgeAt = new Date( new Date( info.deletedAt ).getTime() + trashDays * 86400000 )
+
+			return { id: id, relative: info.relative, deletedAt: info.deletedAt, by: info.by || null, purgeAt: purgeAt.toISOString() }
+		}
+		catch ( e )
+		{
+			return null
+		}
+	}
+
+	function listTrash()
+	{
+		var ids = []
+
+		try { ids = fs.readdirSync( trashFolder() ) }
+		catch ( e ) { }
+
+		return ids.map( trashEntry ).filter( Boolean ).sort( ( a, b ) => b.deletedAt.localeCompare( a.deletedAt ) )
+	}
+
+	function trashEvent( relative, user )
+	{
+		if ( !trashState().enabled ) throw new Error( "The trash is off" )
+
+		var source = eventFolder( relative )
+
+		if ( !source ) throw new Error( "Not an event folder in the open folder" )
+
+		var key = eventKey( path.relative( realPath( lastArgs.folder ), source ) )
+		var deletedAt = new Date().toISOString()
+		var id = deletedAt.replace( /[:.]/g, "-" ) + "-" + Math.random().toString( 36 ).slice( 2, 6 )
+		var dest = path.join( trashFolder(), id, key )
+
+		fs.mkdirSync( path.dirname( dest ), { recursive: true } )
+		fs.writeFileSync( path.join( trashFolder(), id, "info.json" ), JSON.stringify( { relative: key, deletedAt: deletedAt, by: user || null } ) )
+		// Same disk, so this is a quick rename, not a copy.
+		fs.renameSync( source, dest )
+
+		console.log( `Moved ${key} to the trash (${id})` )
+
+		return trashEntry( id )
+	}
+
+	function restoreTrash( id )
+	{
+		var entry = trashEntry( id )
+
+		if ( !entry ) throw new Error( "Not in the trash" )
+
+		var source = path.join( trashFolder(), id, entry.relative )
+		var dest = insideFolder( entry.relative )
+
+		if ( dest == null ) throw new Error( "Outside the open folder" )
+		if ( fs.existsSync( dest ) ) throw new Error( `${entry.relative} exists again; move it away first` )
+
+		fs.mkdirSync( path.dirname( dest ), { recursive: true } )
+		fs.renameSync( source, dest )
+		fs.rmSync( path.join( trashFolder(), id ), { recursive: true, force: true } )
+
+		console.log( `Restored ${entry.relative} from the trash` )
+
+		return entry
+	}
+
+	function purgeTrash( id )
+	{
+		var entry = trashEntry( id )
+
+		if ( !entry ) throw new Error( "Not in the trash" )
+
+		fs.rmSync( path.join( trashFolder(), id ), { recursive: true, force: true } )
+
+		// Its note goes too, unless the event is back in the folder.
+		if ( notes[ entry.relative ] && !fs.existsSync( path.join( lastArgs.folder, entry.relative ) ) && notesState().writable )
+		{
+			saveNote( entry.relative, null )
+		}
+
+		console.log( `Removed ${entry.relative} from the trash for good` )
+
+		return entry
+	}
+
+	function purgeOldTrash()
+	{
+		var now = Date.now()
+
+		for ( var entry of listTrash() )
+		{
+			if ( new Date( entry.purgeAt ).getTime() > now ) continue
+
+			try { purgeTrash( entry.id ) }
+			catch ( e ) { console.error( `Could not empty ${entry.id} from the trash: ${e.message}` ) }
+		}
+	}
+
 	function realPath( p )
 	{
 		try { return fs.realpathSync( p ) }
 		catch ( e ) { return path.resolve( p ) }
+	}
+
+	function samePath( a, b )
+	{
+		return realPath( a ) === realPath( b )
 	}
 
 	// The absolute path of p, read relative to the open folder, if it is the
@@ -275,6 +427,7 @@
 				locked: locked,
 				mode: mode,
 				notes: notesState(),
+				trash: trashState(),
 				version: version
 			}
 		}
@@ -419,6 +572,7 @@
 			locked: locked,
 			mode: mode,
 			notes: notesState(),
+			trash: trashState(),
 			version: version
         }
     }
@@ -434,11 +588,6 @@
 			console.log( ` ${args.folder}` )
 
 			return args
-		}
-
-		function samePath( a, b )
-		{
-			return realPath( a ) === realPath( b )
 		}
 
 		function refuse( response, message )
@@ -494,8 +643,34 @@
 			response.send( getFiles( folder, p => "videos/" + p ) )
 		} )
 
+        // Trash (TeslaUSB mode)
+        function trashRoute( action )
+		{
+			return ( request, response ) =>
+			{
+				if ( !trashState().enabled ) return response.sendStatus( 404 )
+
+				try
+				{
+					response.send( action( request.body || {}, request.get( "Remote-User" ) ) )
+				}
+				catch ( e )
+				{
+					response.status( 400 ).type( "txt" ).send( e.message )
+				}
+			}
+		}
+
+        expressApp.get( "/trash", trashRoute( () => ( { items: listTrash(), days: trashDays } ) ) )
+        expressApp.post( "/trash", trashRoute( ( body, user ) => trashEvent( body.relative, user ) ) )
+        expressApp.post( "/trash/restore", trashRoute( body => restoreTrash( body.id ) ) )
+        expressApp.post( "/trash/purge", trashRoute( body => purgeTrash( body.id ) ) )
+
         expressApp.post( "/deleteFiles", ( request, response ) =>
 		{
+			// In TeslaUSB mode, deleting goes through the trash, whole events only.
+			if ( trashState().enabled ) return refuse( response, "Delete whole events (they go to the trash)" )
+
 			// Paths as the page has them: relative to the open folder.
 			var files = ( Array.isArray( request.body ) ? request.body : [] ).map( insideFolder )
 
@@ -514,6 +689,14 @@
 			if ( target == null || samePath( target, lastArgs.folder ) )
 			{
 				return refuse( response, "Outside the open folder" )
+			}
+
+			if ( trashState().enabled )
+			{
+				try { trashEvent( folder, request.get( "Remote-User" ) ) }
+				catch ( e ) { return response.status( 400 ).type( "txt" ).send( e.message ) }
+
+				return response.sendStatus( 204 )
 			}
 
 			deleteFolder( folder )
@@ -563,6 +746,11 @@
 		setMode: setMode,
 		getNotes: getNotes,
 		saveNote: saveNote,
+		trashEvent: trashEvent,
+		listTrash: listTrash,
+		restoreTrash: restoreTrash,
+		purgeTrash: purgeTrash,
+		purgeOldTrash: purgeOldTrash,
 		insideFolder: insideFolder,
         openFolders: openFolders,
         reopenFolders: reopenFolders,

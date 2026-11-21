@@ -39,6 +39,16 @@
 			fileUrl: ( args, relative ) => "videos/" + encodePath( relative ),
 			copyPath: ( args, relative ) => navigator.clipboard && navigator.clipboard.writeText( joinPath( args.folder, relative ) ),
 			getNotes: done => $.getJSON( "notes", done ),
+			getTrash: done => $.getJSON( "trash", done ),
+			trash: ( action, body, done, fail ) => $.ajax(
+				{
+					url: action ? "trash/" + action : "trash",
+					method: "POST",
+					contentType: "application/json",
+					data: JSON.stringify( body ),
+					success: done,
+					error: x => fail( x.responseText || x.statusText || "No answer from the server" )
+				} ),
 			saveNote: ( relative, note, done, fail ) => $.ajax(
 				{
 					url: "notes/" + encodePath( relative ),
@@ -171,7 +181,6 @@
 			picker: null,
 			showFolders: false,
 			desktop: desktop,
-			canDelete: !!handlers.deleteFolder,
 			canChoose: !!handlers.chooseFolder,
 			canShow: !!handlers.showInFolder,
 			copied: false,
@@ -181,10 +190,17 @@
 			noteKeep: false,
 			noteStatus: "",
 			noteTimer: null,
-			noteKey: null
+			noteKey: null,
+			trashItems: [],
+			showTrash: false,
+			trashMessage: ""
 		},
 		computed:
 		{
+			trashOn: function( on )
+			{
+				if ( on ) this.loadTrash()
+			},
 			"args.notes.enabled": function( on )
 			{
 				if ( on && handlers.getNotes ) handlers.getNotes( r =>
@@ -243,6 +259,14 @@
 
 				return time ? time.toLocaleTimeString() : "--:--:--"
 			},
+			trashOn: function()
+			{
+				return !!( this.args.trash && this.args.trash.enabled && handlers.getTrash )
+			},
+			canDelete: function()
+			{
+				return this.trashOn || !!handlers.deleteFolder
+			},
 			notesOn: function()
 			{
 				return !!( this.args.notes && this.args.notes.enabled && handlers.getNotes )
@@ -275,6 +299,10 @@
 		},
 		watch:
 		{
+			trashOn: function( on )
+			{
+				if ( on ) this.loadTrash()
+			},
 			"args.notes.enabled": function( on )
 			{
 				if ( on && handlers.getNotes ) handlers.getNotes( r =>
@@ -421,11 +449,73 @@
 			{
 				var e = this.selected
 
-				if ( !e || !confirm( `Delete ${e.relative} and every file in it? This cannot be undone.` ) ) return
+				if ( !e ) return
+
+				if ( this.trashOn )
+				{
+					var kept = this.noteOf( e ) && this.noteOf( e ).keep ? " It is starred Keep." : ""
+
+					if ( !confirm( `Move this event to the trash? You can restore it for ${this.args.trash.days} days.${kept}` ) ) return
+
+					this.flushNote()
+					this.controls.playing = false
+					handlers.trash( null, { relative: e.relative },
+						() =>
+						{
+							this.leaveEvent()
+							this.refresh()
+						},
+						message => alert( "Couldn't delete: " + message ) )
+
+					return
+				}
+
+				if ( !confirm( `Delete ${e.relative} and every file in it? This cannot be undone.` ) ) return
 
 				this.controls.playing = false
+				this.leaveEvent()
+				handlers.deleteFolder( e.relative, () => this.refresh() )
+			},
+			leaveEvent: function()
+			{
+				history.replaceState( null, "", location.pathname + location.search )
 				this.selected = null
-				handlers.deleteFolder( e.relative, () => handlers.reopen( a => this.args = a ) )
+			},
+			refresh: function()
+			{
+				handlers.reopen( a => this.args = a )
+				if ( this.trashOn ) this.loadTrash()
+			},
+			loadTrash: function()
+			{
+				handlers.getTrash( r => this.trashItems = r.items || [] )
+			},
+			trashLabel: function( item )
+			{
+				var match = helpers.matchFolder( item.relative.split( "/" ).pop() )
+				var when = match ? helpers.extractDate( match ) : null
+				var parts = item.relative.split( "/" )
+				var category = parts.length > 1 ? parts[ parts.length - 2 ].replace( /Clips$/, "" ) : ""
+
+				return ( when ? this.dateText( when ) + " " + this.timeText( when ) : item.relative ) + ( category ? " · " + category : "" )
+			},
+			trashInfo: function( item )
+			{
+				var days = Math.max( 0, Math.ceil( ( new Date( item.purgeAt ) - Date.now() ) / 86400000 ) )
+
+				return "Deleted " + ( item.by ? "by " + item.by + " " : "" ) + new Date( item.deletedAt ).toLocaleDateString() + " · removed for good in " + days + " day" + ( days === 1 ? "" : "s" )
+			},
+			restoreItem: function( item )
+			{
+				this.trashMessage = ""
+				handlers.trash( "restore", { id: item.id }, () => this.refresh(), message => this.trashMessage = "Couldn't restore: " + message )
+			},
+			purgeItem: function( item )
+			{
+				if ( !confirm( "Remove this event for good? This cannot be undone." ) ) return
+
+				this.trashMessage = ""
+				handlers.trash( "purge", { id: item.id }, () => this.refresh(), message => this.trashMessage = "Couldn't remove: " + message )
 			},
 			openBrowser: function()
 			{
