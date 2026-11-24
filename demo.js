@@ -180,7 +180,8 @@
 		relative: ( from, to ) => to.startsWith( from + "/" ) ? to.slice( from.length + 1 ) : to
 	}
 
-	function index( fileList )
+	// entries: [ { path: "Stick/TeslaCam/.../x.mp4", file: File } ]
+	function index( entries )
 	{
 		urls.forEach( u => URL.revokeObjectURL( u ) )
 		files = new Map()
@@ -188,11 +189,11 @@
 		events = new Map()
 		urls = new Map()
 
-		for ( var file of fileList )
+		for ( var entry of entries )
 		{
-			var parts = ( file.webkitRelativePath || file.name ).split( "/" )
+			var parts = entry.path.split( "/" )
 
-			files.set( parts.join( "/" ), file )
+			files.set( entry.path, entry.file )
 
 			for ( var i = 1; i < parts.length; i++ )
 			{
@@ -239,23 +240,57 @@
 		}
 	}
 
+	// Every file under a folder the File System Access picker returned. Hidden
+	// folders (".Trashes", ".Spotlight-V100", ...) are skipped.
+	async function walk( handle, prefix, out )
+	{
+		var waits = []
+
+		for await ( var [ name, child ] of handle.entries() )
+		{
+			if ( name.startsWith( "." ) ) continue
+
+			var p = prefix + "/" + name
+
+			if ( child.kind === "directory" ) waits.push( walk( child, p, out ) )
+			else waits.push( child.getFile().then( file => out.push( { path: p, file: file } ), () => {} ) )
+		}
+
+		await Promise.all( waits )
+
+		return out
+	}
+
+	function opened( entries, done )
+	{
+		if ( !entries.length ) return
+
+		index( entries ).then( () =>
+		{
+			current = Array.from( dirs.keys() ).sort( ( a, b ) => a.length - b.length )[ 0 ] || ""
+			done( usbArgs() )
+		} )
+	}
+
 	function pickFolder( done )
 	{
+		// Chrome and Edge: asks to let the page view the folder. The older
+		// picker below makes Chrome ask to "upload" the files, which they never are.
+		if ( window.showDirectoryPicker )
+		{
+			window.showDirectoryPicker( { id: "teslacam", mode: "read" } )
+				.then( dir => walk( dir, dir.name, [] ) )
+				.then( entries => opened( entries, done ), () => {} )
+			return
+		}
+
 		var input = document.createElement( "input" )
 
 		input.type = "file"
 		input.multiple = true
 		input.webkitdirectory = true
 		input.addEventListener( "change", () =>
-		{
-			if ( !input.files.length ) return
-
-			index( input.files ).then( () =>
-			{
-				current = Array.from( dirs.keys() ).sort( ( a, b ) => a.length - b.length )[ 0 ] || ""
-				done( usbArgs() )
-			} )
-		} )
+			opened( Array.from( input.files, f => ( { path: f.webkitRelativePath || f.name, file: f } ) ), done ) )
 		input.click()
 	}
 
