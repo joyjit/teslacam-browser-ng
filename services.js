@@ -432,93 +432,17 @@
 			}
 		}
 
-		var specialFolders = [ "TeslaCam", "SavedClips", "RecentClips", "SentryClips", "TeslaSentry", "TrackMode" ]
-		var categoryNames = { SavedClips: "Saved", RecentClips: "Recent", SentryClips: "Sentry", TeslaSentry: "Sentry", TrackMode: "Track" }
-		var folderInfos = []
-
-		function addSubfolders( baseFolder, category )
-		{
-			try
-			{
-				var subfolders = fs.readdirSync( baseFolder )
-
-				for ( var subfolder of subfolders )
-				{
-					if ( specialFolders.includes( subfolder ) )
-					{
-						var nextCategory = categoryNames[ subfolder ] || category
-
-						addSubfolders( path.join( baseFolder, subfolder ), nextCategory )
-					}
-					else
-					{
-						var match = helpers.matchFolder( subfolder )
-					
-						if ( match && match.length > 0 )
-						{
-							function addFolder( match )
-							{
-								var date = helpers.extractDate( match )
-								var folderPath = path.join( baseFolder, subfolder )
-								var relative = path.relative( folder, folderPath )
-						
-								var eventMeta = getEventMetadata( folderPath )
-								var thumb = fs.existsSync( path.join( folderPath, "thumb.png" ) )
-								folderInfos.push( { date: date, path: folderPath, relative: relative, recent: false, event: eventMeta, category: category, thumb: thumb } )
-							}
-
-							addFolder( match )
-						}
-						else
-						{
-							var clipMatch = helpers.matchClip( subfolder )
-
-							if ( clipMatch && clipMatch.length > 0 )
-							{
-								var date = helpers.extractDate( clipMatch )
-								var existing = folderInfos.find( i => i.path == baseFolder )
-
-								if ( existing )
-								{
-									if ( date > existing.date ) existing.date = date
-								}
-								else
-								{
-									var relative = path.relative( folder, baseFolder )
-
-									var clipEventMeta = getEventMetadata( baseFolder )
-									folderInfos.push( { date: date, path: baseFolder, relative: relative, recent: true, event: clipEventMeta, category: category } )
-								}
-							}
-							else if ( /^\d{4}-\d{2}-\d{2}$/.test( subfolder ) )
-							{
-								// RecentClips sometimes nests clips in a date folder
-								// (RecentClips/2023-12-04/2023-12-04_12-23-59-front.mp4).
-								// Only those date folders are walked, not every directory on the drive.
-								try
-								{
-									var datedPath = path.join( baseFolder, subfolder )
-
-									if ( fs.lstatSync( datedPath ).isDirectory() ) addSubfolders( datedPath, category )
-								}
-								catch ( e )
-								{
-									console.error( e && e.message ? e.message : e )
-								}
-							}
-						}
-					}
-				}
-			}
-			catch (e)
-			{
-				console.error( e && e.message ? e.message : e )
-			}
-		}
-
 		folder = path.normalize( ( folder || "" ) + path.sep )
 
-		addSubfolders( folder, null )
+		var folderInfos = helpers.findEvents( folder,
+			{
+				list: p => fs.readdirSync( p ),
+				isDir: isDirectory,
+				exists: p => fs.existsSync( p ),
+				readEvent: getEventMetadata,
+				join: path.join,
+				relative: path.relative
+			} )
 
 		var dateGroups = helpers.groupBy( folderInfos, g => g.date.toDateString() )
 		var dates = Array.from( dateGroups.keys() ).map( d => new Date( d ) )
