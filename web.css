@@ -1,0 +1,508 @@
+/* The web page (web.html). Dark, so the video stands out. */
+
+:root
+{
+	--bg: #121417;
+	--panel: #1b1e23;
+	--line: #2c3138;
+	--text: #e4e6ea;
+	--muted: #8b929c;
+	--accent: #3e8ef7;
+	--sentry: #e5534b;
+	--saved: #3e8ef7;
+	--recent: #8b929c;
+	--track: #d29922;
+	--other: #6e7681;
+}
+
+html, body { height: 100%; }
+
+body
+{
+	background: var(--bg);
+	color: var(--text);
+	font-size: 15px;
+}
+
+a { color: var(--accent); }
+
+#root
+{
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+/* Top bar */
+
+.topbar
+{
+	display: flex;
+	align-items: baseline;
+	gap: 0.6rem;
+	padding: 0.5rem 1rem;
+	border-bottom: 1px solid var(--line);
+	flex-wrap: wrap;
+}
+
+.topbar .brand
+{
+	color: var(--text);
+	font-size: 1.25rem;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.topbar .version { color: var(--muted); font-size: 0.85rem; }
+
+.topbar .credits
+{
+	color: var(--muted);
+	font-size: 0.8rem;
+	margin-left: auto;
+}
+
+/* Two panes: events and player */
+
+.layout
+{
+	display: grid;
+	grid-template-columns: 340px 1fr;
+	flex: 1;
+	min-height: 0;
+}
+
+.events
+{
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-right: 1px solid var(--line);
+	background: var(--panel);
+}
+
+.toolbar
+{
+	padding: 0.6rem 0.75rem;
+	border-bottom: 1px solid var(--line);
+}
+
+/* Folder picker (hidden when the server is locked to one folder) */
+
+.folder-row { margin-bottom: 0.5rem; }
+
+.folder-button
+{
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	width: 100%;
+	padding: 0.3rem 0.6rem;
+	background: var(--bg);
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	text-align: left;
+}
+
+.folder-button .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-button .oi-folder, .folders .oi-folder { color: var(--track); }
+
+.folders
+{
+	margin-bottom: 0.6rem;
+	padding: 0.5rem;
+	max-height: 45vh;
+	overflow-y: auto;
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	font-size: 0.9rem;
+}
+
+.folders .crumbs { margin-bottom: 0.35rem; word-break: break-all; }
+.folders .crumbs a { color: var(--muted); }
+.folders .crumbs .sep { color: var(--line); margin: 0 0.2rem; }
+.folders .crumbs a.current { color: var(--text); font-weight: 600; }
+.folders .sub { display: block; padding: 0.15rem 0.25rem; color: var(--text); border-radius: 3px; }
+.folders .sub:hover { background: #23272d; text-decoration: none; }
+.folders .actions, .details .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.folders .actions .btn-primary { margin-left: auto; }
+
+code { color: var(--text); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+.chip
+{
+	border: 1px solid var(--chip, var(--other));
+	background: var(--chip, var(--other));
+	color: #fff;
+	border-radius: 999px;
+	padding: 0.1rem 0.65rem;
+	font-size: 0.85rem;
+	cursor: pointer;
+}
+
+.chip.off { background: transparent; color: var(--muted); }
+.chip .count { opacity: 0.75; margin-left: 0.15rem; }
+
+.cat-sentry { --chip: var(--sentry); }
+.cat-saved { --chip: var(--saved); }
+.cat-recent { --chip: var(--recent); }
+.cat-track { --chip: var(--track); }
+
+.badge
+{
+	background: var(--chip, var(--other));
+	color: #fff;
+	font-weight: 500;
+}
+
+.jump
+{
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin-top: 0.5rem;
+	color: var(--muted);
+}
+
+.jump input
+{
+	background: transparent;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	color: var(--text);
+	padding: 0.15rem 0.5rem;
+	font-size: 0.85rem;
+	width: 9rem;
+	cursor: pointer;
+}
+
+.list { overflow-y: auto; flex: 1; }
+
+.day
+{
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	margin: 0;
+	padding: 0.4rem 0.75rem;
+	background: var(--panel);
+	border-bottom: 1px solid var(--line);
+	color: var(--muted);
+	font-size: 0.8rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.event
+{
+	display: flex;
+	gap: 0.65rem;
+	padding: 0.5rem 0.75rem;
+	color: var(--text);
+	border-left: 3px solid transparent;
+}
+
+.event:hover { background: #23272d; color: var(--text); text-decoration: none; }
+.event.active { background: #263042; border-left-color: var(--accent); }
+
+.thumb
+{
+	flex: 0 0 96px;
+	width: 96px;
+	height: 72px;
+	object-fit: cover;
+	border-radius: 4px;
+	background: #000;
+}
+
+.thumb.none
+{
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--muted);
+	font-size: 1.4rem;
+}
+
+.info { min-width: 0; }
+.info .line1 { display: flex; align-items: center; gap: 0.4rem; }
+.info .time { font-weight: 600; }
+
+.info .reason, .info .place
+{
+	font-size: 0.85rem;
+	color: var(--muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.empty { padding: 1.5rem 1rem; color: var(--muted); }
+
+.list-credits { display: none; padding: 1rem 0.75rem; color: var(--muted); font-size: 0.8rem; }
+
+.hevc-note
+{
+	margin-bottom: 0.5rem;
+	padding: 0.3rem 0.6rem;
+	border-left: 3px solid var(--track);
+	background: rgba( 210, 153, 34, 0.12 );
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.hevc-note summary { color: var(--text); cursor: pointer; }
+
+/* Player */
+
+.player
+{
+	overflow-y: auto;
+	padding: 0.75rem 1rem;
+}
+
+.player-head
+{
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.5rem;
+	min-height: 1.5rem;
+}
+
+.player-head .back { display: none; }
+.player-head .when { font-weight: 600; }
+
+/* Cameras laid out like the car, seen from above, front at the top. */
+
+.car-view
+{
+	/* Two rows of 4:3 videos across three columns stay within the window. */
+	max-width: calc( ( 100vh - 15rem ) * 2 );
+	margin: 0 auto;
+}
+
+.cams
+{
+	display: grid;
+	grid-template-columns: repeat( 3, 1fr );
+	gap: 4px;
+}
+
+.cam
+{
+	position: relative;
+	aspect-ratio: 4 / 3;
+	background: #000;
+	cursor: zoom-in;
+	overflow: hidden;
+	border-radius: 3px;
+}
+
+.cam video
+{
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	display: block;
+}
+
+.cam-label
+{
+	position: absolute;
+	left: 0.4rem;
+	bottom: 0.3rem;
+	padding: 0 0.35rem;
+	border-radius: 3px;
+	background: rgba( 0, 0, 0, 0.6 );
+	color: #fff;
+	font-size: 0.75rem;
+	pointer-events: none;
+}
+
+/* One camera enlarged, the others in a strip below it. */
+
+.cams.focused
+{
+	display: flex;
+	flex-wrap: wrap;
+	max-width: calc( 100vh - 15rem );
+	margin: 0 auto;
+}
+
+.cams.focused .cam { flex: 1 1 0; min-width: 0; }
+.cams.focused .cam.big { flex: 0 0 100%; cursor: zoom-out; }
+
+/* The single player bar */
+
+.player-bar
+{
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin-top: 0.6rem;
+	padding: 0.5rem 0.75rem;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.player-bar .play { width: 2.75rem; }
+
+.player-bar .clock { text-align: center; min-width: 5.5rem; line-height: 1.2; }
+.player-bar .clock .wall { font-weight: 600; font-variant-numeric: tabular-nums; }
+.player-bar .clock .elapsed { color: var(--muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+
+.player-bar .scrub-container { flex: 1; display: flex; align-items: center; }
+.player-bar .speed { width: auto; background-color: var(--bg); color: var(--text); border-color: var(--line); }
+
+.details
+{
+	margin-top: 0.6rem;
+	padding: 0 0.25rem;
+	display: grid;
+	gap: 0.3rem;
+}
+
+.details .label
+{
+	display: inline-block;
+	min-width: 4.5rem;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.muted { color: var(--muted); }
+.hint { font-size: 0.8rem; }
+
+/* Notes and Keep (TeslaUSB mode) */
+
+:root { --keep: #e3b341; }
+
+.mode-tag
+{
+	padding: 0 0.45rem;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	color: var(--muted);
+	font-size: 0.75rem;
+}
+
+.chip.kept { --chip: #9e6a03; }
+.kept-mark { color: var(--keep); font-size: 0.8rem; }
+.note-mark { color: var(--muted); font-size: 0.75rem; }
+
+.info .note-line
+{
+	font-size: 0.85rem;
+	color: var(--text);
+	font-style: italic;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.keep-button
+{
+	margin-left: auto;
+	padding: 0.1rem 0.6rem;
+	background: transparent;
+	color: var(--muted);
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	font-size: 0.85rem;
+}
+
+.keep-button.on { color: var(--bg); background: var(--keep); border-color: var(--keep); }
+
+.notes { display: grid; gap: 0.25rem; margin-top: 0.3rem; }
+.notes label { margin: 0; color: var(--muted); font-size: 0.85rem; }
+
+.notes textarea
+{
+	width: 100%;
+	max-width: 48rem;
+	padding: 0.4rem 0.55rem;
+	background: var(--panel);
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	resize: vertical;
+}
+
+.notes textarea:focus { outline: none; border-color: var(--accent); }
+.note-status { min-height: 1.1rem; color: var(--muted); font-size: 0.8rem; }
+.note-status.error { color: var(--sentry); }
+
+/* Trash (TeslaUSB mode) */
+
+.trash-button
+{
+	margin-left: auto;
+	padding: 0.1rem 0.55rem;
+	background: transparent;
+	color: var(--muted);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	font-size: 0.85rem;
+}
+
+.trash-button .count { color: var(--text); }
+.trash-item { padding: 0.4rem 0; border-top: 1px solid var(--line); }
+.trash-item .what { font-weight: 600; }
+.trash-item .actions { margin-top: 0.3rem; }
+
+/* Phone: the list, then the player on its own screen. */
+
+/* Demo site: switch between the sample archive and the visitor's own folder. */
+.topbar .demo { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.demo-switch
+{
+	display: inline-flex;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	overflow: hidden;
+}
+.demo-switch button
+{
+	padding: 0.15rem 0.75rem;
+	border: 0;
+	background: transparent;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+.demo-switch button.on { background: var(--accent, #2f6fde); color: #fff; }
+.demo-switch button:not( .on ):hover { color: var(--text); }
+.demo-note { color: var(--muted); font-size: 0.8rem; }
+
+@media ( max-width: 767.98px )
+{
+	.topbar { flex-wrap: wrap; }
+	.demo-note { flex-basis: 100%; }
+
+	.topbar .credits { display: none; }
+	.list-credits { display: block; }
+
+	.layout { grid-template-columns: 1fr; }
+	.events { border-right: 0; }
+	.player { display: none; padding: 0.5rem; }
+
+	#root.show-player .events { display: none; }
+	#root.show-player .player { display: block; }
+
+	.player-head .back { display: inline-block; }
+
+	.car-view, .cams.focused { max-width: none; }
+
+	/* The other cameras as a strip you tap to swap in. */
+	.cams.focused .cam:not( .big ) { cursor: pointer; }
+
+	.player-bar { gap: 0.5rem; padding: 0.4rem 0.5rem; }
+	.player-bar .clock { min-width: 4.5rem; }
+	.hint { display: none; }
+}
