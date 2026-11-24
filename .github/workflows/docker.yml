@@ -1,0 +1,92 @@
+# Build the Docker image, check that it starts, and publish it to
+# ghcr.io/<owner>/teslacam-browser-ng for amd64 and arm64.
+#
+# - Push to master: tags "latest", "sha-<commit>", and the version from
+#   package.json, e.g. "0.5.0" and "0.5". Bump it there for a new version.
+# - Pull request: build and check only, nothing is published.
+name: Docker image
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/teslacam-browser-ng
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      # Build for this runner only, so the check below can run it.
+      - name: Build (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: teslacam-browser-ng:check
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check that the server starts and serves the page
+        run: |
+          mkdir -p clips/SavedClips
+          docker run -d --name check -p 8088:8088 \
+            -v "$PWD/clips:/media/TeslaCam:ro" teslacam-browser-ng:check
+          for i in $(seq 30); do
+            curl -fsS -o /dev/null http://localhost:8088/ && exit 0
+            sleep 1
+          done
+          docker logs check
+          exit 1
+
+      - name: Version from package.json
+        id: version
+        run: |
+          v=$(node -p "require('./package.json').version")
+          echo "full=$v" >> "$GITHUB_OUTPUT"
+          echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.full }},enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.minor }},enable={{is_default_branch}}
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish (amd64, arm64)
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

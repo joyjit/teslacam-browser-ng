@@ -7,7 +7,7 @@ FROM node:22-bookworm-slim
 WORKDIR /usr/src/teslacam-browser
 
 COPY package.json yarn.lock ./
-RUN npm install -g yarn@1.22.22 && yarn install --frozen-lockfile
+RUN npm install -g yarn@1.22.22 && yarn install --frozen-lockfile --ignore-scripts
 
 COPY . .
 
