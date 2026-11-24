@@ -4,7 +4,7 @@
 #
 #   scripts/build-demo-site.sh <clips>/TeslaCam <out-dir>
 #
-# Runs the server on the clips (folder locked), saves its answers as plain
+# Runs the server on the clips, saves its answers as plain
 # files at the same paths the page asks for, and copies the page, its
 # libraries and the clips next to them. The clips should already be made safe
 # to share (see scripts/make-demo-clips.py). Needs node, curl and the
@@ -60,7 +60,7 @@ done
 
 # The page, its scripts and styles, and the library files it links to.
 cd "$here"
-cp app.css web.css helpers.js hevc.js ui.js web.js "$out/"
+cp app.css web.css helpers.js hevc.js ui.js web.js demo.js "$out/"
 grep -oE '(src|href)="node_modules/[^"]+"' web.html | cut -d'"' -f2 |
 	while read -r f; do
 		mkdir -p "$out/$(dirname "$f")"
@@ -69,8 +69,11 @@ grep -oE '(src|href)="node_modules/[^"]+"' web.html | cut -d'"' -f2 |
 # Icon font files the open-iconic stylesheet points to.
 cp -r node_modules/open-iconic/font/fonts "$out/node_modules/open-iconic/font/"
 
-# Say on the page that this is a demo.
-sed 's|\(<a class="brand"[^>]*>[^<]*</a>\)|\1\n      <span class="mode-tag">Demo: faces and plates blurred, places moved</span>|' \
+# demo.js (sample archive / your own folder, switched in the top bar) goes
+# in before web.js and replaces the server calls.
+tag='<script type="text/javascript" src="web.js"></script>'
+grep -qF "$tag" web.html
+sed "s|$tag|<script type=\"text/javascript\" src=\"demo.js\"></script>\n  $tag|" \
 	web.html > "$out/index.html"
 touch "$out/.nojekyll"
 

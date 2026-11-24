@@ -1,103 +1,101 @@
-# TeslaCam Browser
+# TeslaCam Browser NG
 
-Local browser for TeslaCam archives on a computer. Tesla's own Dashcam Viewer (in the car, and in the mobile app over Premium Connectivity) is the easier way to watch a recent clip while the car is around. This project is for the USB or SD card after you pull it: a whole archive, offline, with every camera on one screen.
+Watch your Tesla dashcam and Sentry clips with every camera in sync and every
+event in one list. Works on a computer, a home server or a phone.
 
-Plug the drive in, or point the app at a copy of the `TeslaCam` folder. Clips are grouped on a calendar. Playback keeps the cameras in sync, and clicking a video opens the file on disk.
+**[Try the live demo](https://joyjit.github.io/teslacam-browser-ng/)**. It has
+two modes, switched in the top bar:
 
-## Where this still helps
+- **Sample archive:** real clips with faces and number plates blurred and
+  places moved. Notes, Keep stars and the trash work, and stay in your browser.
+- **My USB stick:** open your own `TeslaCam` folder or USB stick. It plays in
+  your browser and nothing is uploaded.
 
-- **Offline archive.** The drive does not need to be in the car, and nothing is streamed through Premium Connectivity or a data cap.
-- **Several cameras at once.** Left, front, right, back, and cabin stay side by side, share one scrubber, and can play at 1x, 2x, or 10x. Shorter clips wait so the others stay lined up.
-- **A big disk, not one event.** Open SavedClips, SentryClips, RecentClips, or TrackMode and move through days. Copy a folder path into [tesla_dashcam](https://github.com/ehendrix23/tesla_dashcam) when you want a merged file. Delete clips from the drive after you confirm.
-- **event.json next to the pictures.** Sentry events show the trigger reason, city, and a map link from the file on disk.
-- **A machine on the network.** `node server.js` or the Docker image serves the same UI. That is the path for a NAS or a Pi sitting next to the drive. Linux still cannot decode HEVC in Chrome or Electron; use a Mac or Windows browser for those files, or merge them with tesla_dashcam.
+## Highlights
 
-Watching the latest event in the car or in the phone app is enough for a lot of people. This app does not replace that.
+- **One event list.** Newest first and grouped by day, with a thumbnail,
+  reason and place for each event. Filter by Sentry, Saved, Recent or Track,
+  or jump to a day.
+- **Cameras laid out like the car.** Front in the middle, sides left and right,
+  back below, plus pillars and cabin when present. Click a camera to enlarge it.
+- **One player bar.** Play, speed and scrub for all cameras at once. The moment
+  of the event is marked on the bar, with a Jump to event button.
+- **Works on a phone.** The list comes first, then the player with a strip of
+  cameras to swap.
+- **Two modes**, below: a USB stick or one fixed clip archive.
+- **Desktop app or server.** Electron for Mac, Windows and Linux, or a small
+  web server for a NAS, a Raspberry Pi or Docker.
 
-## Features
+## Two modes
 
-- Dashcam, Sentry, and Track Mode folders, including RecentClips stored under a `YYYY-MM-DD` directory
-- Repeater and pillar camera names, plus front, back, and cabin, wrapped three across
-- Calendar navigation and a Saved / Sentry / Recent / Track label on each event
-- Sentry `event.json` (reason, city, map link, timestamp)
-- Combined or per-clip playback, scrubbing, and speed
-- Desktop app and a headless server on port 8088
+| | USB stick (default) | TeslaUSB |
+| --- | --- | --- |
+| For | A USB stick, or a copy of its `TeslaCam` folder | One clip archive on a server, e.g. uploaded by [TeslaUSB](https://github.com/marcone/teslausb) |
+| Folders | Open any folder | Locked to the start folder |
+| Notes and Keep star | No | Yes, saved next to the clips |
+| Delete | Deletes the event (desktop app) | Moves it to a trash for 30 days |
 
-## Installation
+## Run it
 
-Packages, when cut, are on the [Releases](https://github.com/BobStrogg/teslacam-browser/releases) page. macOS builds are universal (Apple Silicon and Intel). Code signing stays in the builder's environment. Do not commit an `.env` or a certificate.
-
-The desktop shell is Electron 45 (Chromium 156). Electron 45 supports macOS Ventura (13) and newer, Windows 10 and newer, and current Linux distributions. It does not run on macOS Big Sur (11) or Monterey (12).
-
-## Running from the command line
+Desktop app, from source:
 
 ```
-cd teslacam-browser
 yarn install
 yarn start
 ```
 
-## Running as a headless server
+Server, then open http://localhost:8088:
 
 ```
-cd teslacam-browser
 yarn install
 node server.js /path/to/TeslaCam
 ```
 
-Open http://localhost:8088 . On another machine, use the server's address instead of `localhost`.
+TeslaUSB mode: start the server with `TESLACAM_MODE=teslausb`. The server
+needs write access to the clip folder for notes and the trash. Both are kept
+in `.teslacam-browser/` inside it.
 
-Docker, including arm64 hosts (the base image publishes both architectures):
+Docker (amd64 and arm64):
 
 ```
 docker build -t teslacam-browser .
-docker run --rm -p 8088:8088 -v /path/to/TeslaCam:/media/TeslaCam teslacam-browser
+docker run --rm -p 8088:8088 \
+  -v /path/to/TeslaCam:/media/TeslaCam teslacam-browser
 ```
 
-### TeslaUSB mode: a fixed clip archive, with notes
+Add `-e TESLACAM_MODE=teslausb` for TeslaUSB mode.
 
-By default the page has a folder list, so anyone using it can open any folder the server can read. For a server that holds one clip archive, for example clips uploaded by [TeslaUSB](https://github.com/marcone/teslausb), set `TESLACAM_MODE=teslausb`:
+The server only shows, plays and deletes files inside the open folder. Behind
+a login proxy that sends `Remote-User` (Authelia does), notes and deletions
+record who made them. Trust that only if the server can't be reached any
+other way.
 
-- Only the start folder is shown. The folder list is hidden, and the server refuses to open any other folder.
-- Each event can have a note and a Keep star. Notes are kept in `.teslacam-browser/notes.json` inside the clip folder, so the server needs write access to that folder. If it can't write, the page still works and says why.
-- Delete moves a whole event to `.teslacam-browser/trash` inside the clip folder. It can be restored from the page for 30 days, then it is removed for good. Only event folders can be deleted, never `SentryClips` or the clip folder itself.
-- If a login proxy in front of the server sends a `Remote-User` header (Authelia does), each note and deleted event records who did it. Only trust this when the server can't be reached except through that proxy.
+## Changes from the original
 
-```
-TESLACAM_MODE=teslausb node server.js /path/to/TeslaCam
-```
+This started as a fork of [TeslaCam Browser](https://github.com/BobStrogg/teslacam-browser)
+by Chris Cavanagh. The main changes:
 
-In Docker, add `-e TESLACAM_MODE=teslausb`, or in a compose file:
+- A new page for web and desktop: the event list, the car layout, one player
+  bar with the event marked, and a phone layout. The old page is still at
+  `/classic`.
+- TeslaUSB mode: one locked folder, notes and Keep stars per event, and a
+  30-day trash.
+- A safer server: no paths outside the open folder (`..` and links are
+  checked), and nothing is deleted outside it.
+- A live demo, which can also open your own folder in the browser.
+- Test tools: `scripts/make-fake-clips.sh` makes fake clips, and
+  `scripts/make-demo-clips.py` makes real clips safe to share (blurring,
+  moved location, no metadata).
 
-```
-    environment:
-      TESLACAM_MODE: teslausb
-```
+## Good to know
 
-In every mode, the server serves videos only from the open folder, and refuses to list or delete anything outside it.
-
-## HEVC / H.265
-
-HW3 and later firmware store HEVC. The page asks `canPlayType` and `MediaSource.isTypeSupported` for `hvc1` and `hev1`. If the answer is no, a warning is shown instead of a blank player, and a clip that fails to decode shows the same explanation.
-
-Measured on Linux x64 with Electron 45.1.0 (Chromium 156.0.8078.49), in the desktop window and in the server page loaded in that same Chromium:
-
-| Type | canPlayType | MediaSource.isTypeSupported |
-| --- | --- | --- |
-| `video/mp4; codecs="hvc1.1.6.L93.B0"` | empty | false |
-| `video/mp4; codecs="hev1.1.6.L93.B0"` | empty | false |
-| `video/mp4; codecs="hvc1"` | empty | false |
-| `video/mp4; codecs="hev1"` | empty | false |
-| `video/mp4; codecs="avc1.42E01E"` (H.264) | probably | true |
-
-Linux builds of Chrome and Electron do not ship an HEVC decoder, so those clips stay blank there. Chromium uses the operating system's decoder where it has one: VideoToolbox on macOS (Apple Silicon and Intel Macs with HEVC hardware), and Media Foundation on Windows when the HEVC Video Extensions are installed. Those two platforms were not booted in this environment, so that part is Chromium's platform-decoder behavior, not a local playback test. Safari on macOS and Edge on Windows remain the browsers to try from the Browse button. There is no ffmpeg transcode step in this app.
-
-## tesla_dashcam
-
-1. Select the date and event folder
-2. Click "Copy path"
-3. `tesla_dashcam "<paste_folder_here>"`
+- **HEVC (H.265) clips** from newer cars don't play in Chrome or the desktop
+  app on Linux, because there's no decoder. Use a Mac, or Windows with the
+  HEVC Video Extensions. The page shows a warning when it can't play them.
+- **Merged video:** click Copy path on an event, then run
+  [tesla_dashcam](https://github.com/ehendrix23/tesla_dashcam) on that path.
+- Not affiliated with Tesla.
 
 ## License
 
-[CC0 1.0 (Public Domain)](LICENSE.md)
+[CC0 1.0 (public domain)](LICENSE.md)

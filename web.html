@@ -28,10 +28,18 @@
     <header class="topbar">
       <a class="brand" href="./">TeslaCam Browser NG</a>
       <span class="version">{{ args.version }}</span>
-      <span class="mode-tag" v-if="args.mode === 'teslausb'">TeslaUSB mode</span>
+      <span class="mode-tag" v-if="args.mode === 'teslausb' && !args.demo">TeslaUSB mode</span>
+      <span class="demo" v-if="args.demo">
+        <span class="mode-tag">Demo</span>
+        <span class="demo-switch" role="group" aria-label="Demo mode">
+          <button v-for="m in args.demo.modes" :key="m.id" type="button" :class="{ on: m.id === args.demo.mode }"
+            :aria-pressed="m.id === args.demo.mode ? 'true' : 'false'" @click="setDemoMode( m.id )">{{ m.label }}</button>
+        </span>
+        <span class="demo-note">{{ args.demo.note }}</span>
+      </span>
       <span class="credits">
-        Based on <a href="https://github.com/BobStrogg/teslacam-browser" target="_blank"
-          rel="noopener">TeslaCam Browser</a> by Chris Cavanagh. Not affiliated with Tesla.
+        <a href="https://github.com/joyjit/teslacam-browser-ng" target="_blank" rel="noopener">GitHub</a>
+        · Not affiliated with Tesla.
       </span>
     </header>
 
@@ -61,7 +69,7 @@
             <div class="muted small" v-if="args.subfolders && args.subfolders.length === 0">No folders inside.</div>
             <div class="actions">
               <button v-if="canChoose" type="button" class="btn btn-sm btn-outline-light" @click="chooseFolder">
-                Choose with system dialog…</button>
+                Choose another folder…</button>
               <button type="button" class="btn btn-sm btn-primary" @click="showFolders = false">Done</button>
             </div>
           </div>
@@ -139,8 +147,8 @@
           </section>
 
           <p class="list-credits">
-            Based on <a href="https://github.com/BobStrogg/teslacam-browser" target="_blank"
-              rel="noopener">TeslaCam Browser</a> by Chris Cavanagh. Not affiliated with Tesla.
+            <a href="https://github.com/joyjit/teslacam-browser-ng" target="_blank" rel="noopener">GitHub</a>
+            · Not affiliated with Tesla.
           </p>
         </div>
 
@@ -223,7 +231,7 @@
                 {{ notesWritable ? noteStatus : args.notes.error }}</div>
             </div>
             <div class="actions">
-              <button type="button" class="btn btn-sm btn-outline-light" @click="copyPath">
+              <button v-if="canCopy" type="button" class="btn btn-sm btn-outline-light" @click="copyPath">
                 {{ copied ? "Copied" : "Copy path" }}</button>
               <button v-if="canShow" type="button" class="btn btn-sm btn-outline-light" @click="showInFolder">
                 Show in folder</button>

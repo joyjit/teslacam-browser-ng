@@ -18,7 +18,8 @@
 		return String( folder || "" ).replace( /[\\/]+$/, "" ) + "/" + relative
 	}
 
-	var handlers = desktop
+	// A page can bring its own calls (the demo site does, see demo.js).
+	var handlers = window.teslacamHandlers || ( desktop
 		? {
 			openFolder: ( p, done ) => done( api.openFolder( p ) ),
 			chooseFolder: done => done( api.openFolders() ),
@@ -60,7 +61,7 @@
 				} ),
 			openBrowser: () => {},
 			openExternal: () => {}
-		}
+		} )
 
 	function words( value )
 	{
@@ -183,6 +184,7 @@
 			desktop: desktop,
 			canChoose: !!handlers.chooseFolder,
 			canShow: !!handlers.showInFolder,
+			canCopy: !!handlers.copyPath,
 			copied: false,
 			notes: {},
 			onlyKept: false,
@@ -426,6 +428,10 @@
 
 				// Nothing open yet: start browsing at the top of the disk.
 				if ( this.showFolders && !this.args.folder ) this.openFolder( "/" )
+			},
+			setDemoMode: function( id )
+			{
+				handlers.setDemoMode( id )
 			},
 			chooseFolder: function()
 			{
