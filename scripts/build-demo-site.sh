@@ -54,8 +54,10 @@ node -e '
 	"$out/openDefaultFolder" | while read -r rel; do
 	mkdir -p "$out/files/$(dirname "$rel")" "$out/videos/$rel"
 	get "files/$rel" > "$out/files/$rel"
-	cp "$clips/$rel"/*.mp4 "$clips/$rel"/event.json "$out/videos/$rel/"
-	[ -f "$clips/$rel/thumb.png" ] && cp "$clips/$rel/thumb.png" "$out/videos/$rel/"
+	cp "$clips/$rel"/*.mp4 "$out/videos/$rel/"
+	for f in event.json thumb.png; do
+		if [ -f "$clips/$rel/$f" ]; then cp "$clips/$rel/$f" "$out/videos/$rel/"; fi
+	done
 done
 
 # The page, its scripts and styles, and the library files it links to.
@@ -75,6 +77,11 @@ tag='<script type="text/javascript" src="web.js"></script>'
 grep -qF "$tag" web.html
 sed "s|$tag|<script type=\"text/javascript\" src=\"demo.js\"></script>\n  $tag|" \
 	web.html > "$out/index.html"
+
+# Tag script and style links with the build's commit, so a browser never mixes
+# a cached old file with a new page (GitHub Pages lets them cache 10 minutes).
+v=$(git -C "$here" rev-parse --short HEAD 2>/dev/null || date +%s)
+sed -i -E "s#(src|href)=\"([^\":]+\.(js|css))\"#\1=\"\2?v=$v\"#g" "$out/index.html"
 touch "$out/.nojekyll"
 
 if grep -rlF "$parent" "$out"; then
