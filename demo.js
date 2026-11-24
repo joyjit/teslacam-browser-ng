@@ -246,11 +246,13 @@
 	{
 		var waits = []
 
-		for await ( var [ name, child ] of handle.entries() )
+		// const, not var: each file's path must stay its own until getFile()
+		// answers, after the loop has moved on.
+		for await ( const [ name, child ] of handle.entries() )
 		{
 			if ( name.startsWith( "." ) ) continue
 
-			var p = prefix + "/" + name
+			const p = prefix + "/" + name
 
 			if ( child.kind === "directory" ) waits.push( walk( child, p, out ) )
 			else waits.push( child.getFile().then( file => out.push( { path: p, file: file } ), () => {} ) )
