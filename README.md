@@ -99,9 +99,10 @@ by Chris Cavanagh. The main changes:
 
 ## Good to know
 
-- **HEVC (H.265) clips** from newer cars don't play in Chrome on Linux,
-  because there's no decoder. Use a Mac, or Windows with the
-  HEVC Video Extensions. The page shows a warning when it can't play them.
+- **HEVC (H.265) clips** from newer cars: on Linux, use Firefox 137 or
+  newer; Chrome on Linux usually can't play them. On Windows, install the
+  HEVC Video Extensions. Macs play them as is. The page shows a warning
+  when it can't play them.
 - **Merged video:** click Copy path on an event, then run
   [tesla_dashcam](https://github.com/ehendrix23/tesla_dashcam) on that path.
 

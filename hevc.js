@@ -15,7 +15,7 @@
 	]
 	var AVC_TYPE = "video/mp4; codecs=\"avc1.42E01E\""
 
-	var FALLBACK_MESSAGE = "Tesla HW3 and later clips are HEVC (H.265). This browser cannot decode them, so the picture stays blank. macOS can play them in Safari or in this desktop app (Apple Silicon and Intel, via VideoToolbox). Windows can play them in Edge, Chrome, or this app after the HEVC Video Extensions are installed. Linux builds of Chrome and Electron do not include an HEVC decoder. Use Browse to try another browser, or copy the folder path into tesla_dashcam."
+	var FALLBACK_MESSAGE = "Tesla HW3 and later clips are HEVC (H.265). This browser cannot decode them, so the picture stays blank. On Linux, use Firefox 137 or newer; Chrome on Linux usually cannot play them. On Windows, install the HEVC Video Extensions, then use Edge, Chrome or Firefox. Macs play them in Safari or Chrome. You can also copy the folder path into tesla_dashcam."
 
 	function probe( canPlayType, isTypeSupported, type )
 	{
