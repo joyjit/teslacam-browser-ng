@@ -61,10 +61,28 @@ docker run --rm -p 8088:8088 \
 Add `-e TESLACAM_MODE=teslausb` for TeslaUSB mode. To build the image
 yourself: `docker build -t teslacam-browser-ng .`
 
-The server only shows, plays and deletes files inside the open folder. Behind
-a login proxy that sends `Remote-User` (Authelia does), notes and deletions
-record who made them. Trust that only if the server can't be reached any
-other way.
+The server only shows, plays and deletes files inside the open folder.
+
+## Putting it online
+
+The app has **no login of its own**, and anyone who can reach it can watch
+and delete clips. Never forward port 8088 on your router.
+
+To reach it from outside your home, put a web server in front that adds
+HTTPS and a login, for example [Caddy](https://caddyserver.com) with
+[Authelia](https://www.authelia.com), or a Cloudflare Tunnel with Access.
+Start the container with `-p 127.0.0.1:8088:8088` so only that web server
+can reach it. A minimal Caddy site (Caddy gets the HTTPS certificate by
+itself; add your login with `forward_auth`):
+
+```
+clips.example.com {
+  reverse_proxy localhost:8088
+}
+```
+
+If the login sends the user's name in a `Remote-User` header (Authelia
+does), notes and deletions record who made them.
 
 ## Changes from the original
 
