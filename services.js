@@ -528,6 +528,15 @@
 		{
 			if ( !lastArgs.folder ) return next()
 
+			// express.static follows symbolic links, so check where the file
+			// really is, like every other route does.
+			var wanted
+
+			try { wanted = decodeURIComponent( request.path ) }
+			catch ( e ) { return refuse( response, "Bad path" ) }
+
+			if ( insideFolder( wanted ) == null ) return refuse( response, "Outside the open folder" )
+
 			if ( videoFolder !== lastArgs.folder )
 			{
 				videoFolder = lastArgs.folder

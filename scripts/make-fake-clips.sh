@@ -36,12 +36,15 @@ hue() {
 
 # clip <file> <camera> <start label>
 clip() {
-  local file="$1" cam="$2" label="$3" vf
+  local file="$1" cam="$2" label="$3" vf text
   vf="hue=h=$(hue "${cam}")"
   if [[ -n "${FONT}" ]]; then
+    # From a file: ffmpeg versions differ in how ":" in text= is escaped.
+    text="$(mktemp)"
+    printf '%s  %s' "${cam}" "${label}" > "${text}"
     vf+=",drawtext=fontfile=${FONT}:fontcolor=white"
     vf+=":box=1:boxcolor=black@0.6:fontsize=22:x=(w-tw)/2:y=10"
-    vf+=":text='${cam}  ${label}'"
+    vf+=":textfile=${text}"
     vf+=",drawtext=fontfile=${FONT}:fontcolor=white"
     vf+=":box=1:boxcolor=black@0.6:fontsize=40"
     vf+=":x=(w-tw)/2:y=h-th-20:text='+%{pts\\:hms}'"
@@ -50,6 +53,8 @@ clip() {
     -f lavfi -i "testsrc2=size=480x360:rate=24:duration=${SECS}" \
     -vf "${vf}" -c:v libx264 -preset veryfast -crf 32 \
     -pix_fmt yuv420p -movflags +faststart "${file}"
+  [[ -n "${text:-}" ]] && rm -f "${text}"
+  return 0
 }
 
 # stamp <epoch seconds> <date format> -> local time text

@@ -34,7 +34,7 @@ two modes, switched in the top bar:
 | For | A USB stick, or a copy of its `TeslaCam` folder | One clip archive on a server, e.g. uploaded by [TeslaUSB](https://github.com/marcone/teslausb) |
 | Folders | Open any folder | Locked to the start folder |
 | Notes and Keep star | No | Yes, saved next to the clips |
-| Delete | Deletes the event | Moves it to a trash for 30 days |
+| Delete | No | Moves it to a trash for 30 days |
 
 ## Run it
 
