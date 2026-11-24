@@ -37,7 +37,11 @@ jobs:
           mkdir -p demo-clips
           gh release download demo-clips -p demo-clips.tar.gz -O - \
             | tar -xz -C demo-clips
+      # The server reads folder names as local time; use the zone the
+      # clips were recorded in, or the list times shift.
       - run: scripts/build-demo-site.sh demo-clips/TeslaCam site
+        env:
+          TZ: America/Los_Angeles
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
