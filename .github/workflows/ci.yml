@@ -1,0 +1,251 @@
+# Test, then publish. Every job runs on a fresh GitHub virtual machine, and
+# the tests run inside throwaway containers on it.
+#
+#   checks      unit tests; makes the fake clips and the demo site the
+#               other jobs use (node:22-bookworm-slim, like the image)
+#   source      server started from source: safety checks and browser
+#               tests, plus the demo site (Playwright container)
+#   docker      the same checks and browser tests against the Docker image
+#   publish     image to ghcr.io (amd64 + arm64), tagged latest, sha-<commit>
+#               and the package.json version
+#   demo        demo site with the real sample clips to GitHub Pages
+#
+# Pull requests and the weekly run stop after the tests; pushes to master
+# and the Run workflow button also publish. Changes to *.md files alone
+# don't start it.
+name: CI
+
+on:
+  push:
+    branches: [master]
+    paths-ignore: ["**.md"]
+  pull_request:
+    paths-ignore: ["**.md"]
+  schedule:
+    - cron: "0 9 * * 1" # Mondays 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Folder names are read as local time; keep every part on the same zone.
+  TZ: UTC
+  IMAGE: ghcr.io/${{ github.repository_owner }}/teslacam-browser-ng
+
+jobs:
+  checks:
+    name: Unit tests and test clips
+    runs-on: ubuntu-latest
+    container: node:22-bookworm-slim
+    outputs:
+      playwright: ${{ steps.versions.outputs.playwright }}
+    steps:
+      - name: Tools for making clips
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ffmpeg curl git ca-certificates fontconfig fonts-dejavu-core
+      - uses: actions/checkout@v7
+      - run: yarn install --frozen-lockfile --ignore-scripts
+      - run: yarn test
+      - id: versions
+        name: Playwright version (picks the test container)
+        run: |
+          v=$(node -p "require('@playwright/test/package.json').version")
+          echo "playwright=$v" >> "$GITHUB_OUTPUT"
+      - name: Fake clips and a demo site built from them
+        run: |
+          scripts/make-fake-clips.sh fixtures 8
+          scripts/build-demo-site.sh fixtures/TeslaCam fixtures/site
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fixtures
+          path: fixtures
+          retention-days: 3
+
+  source:
+    name: Server from source
+    needs: checks
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/playwright:v${{ needs.checks.outputs.playwright }}-noble
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: fixtures
+          path: fixtures
+      - run: npx -y yarn@1.22.22 install --frozen-lockfile --ignore-scripts
+      - run: npx playwright install --with-deps chrome
+      - name: Start both servers and the demo site, run the tests
+        run: |
+          mkdir -p fixtures/teslausb
+          cp -r fixtures/TeslaCam fixtures/teslausb/
+          PORT=8081 node server.js fixtures/TeslaCam > server.log 2>&1 &
+          PORT=8082 TESLACAM_MODE=teslausb \
+            node server.js fixtures/teslausb/TeslaCam > teslausb.log 2>&1 &
+          node -e 'const e = require( "express" )
+            e().use( e.static( process.argv[1] ) ).listen( 8083 )' \
+            fixtures/site &
+          SERVER_URL=http://localhost:8081 \
+          TESLAUSB_URL=http://localhost:8082 \
+          DEMO_URL=http://localhost:8083 \
+          CLIPS="$PWD/fixtures/TeslaCam" \
+          TESLAUSB_CLIPS="$PWD/fixtures/teslausb/TeslaCam" \
+            test/run-all.sh
+      - if: failure()
+        run: cat server.log teslausb.log
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: report-source
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  docker:
+    name: Docker image
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: fixtures
+          path: fixtures
+      - uses: docker/setup-buildx-action@v4
+      - name: Build (amd64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: teslacam-browser-ng:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start the image in both modes
+        run: |
+          mkdir -p fixtures/teslausb
+          cp -r fixtures/TeslaCam fixtures/teslausb/
+          docker run -d --name app -p 8081:8088 -e TZ \
+            -v "$PWD/fixtures/TeslaCam:/media/TeslaCam:ro" \
+            teslacam-browser-ng:ci
+          docker run -d --name app-teslausb -p 8082:8088 -e TZ \
+            -e TESLACAM_MODE=teslausb \
+            -v "$PWD/fixtures/teslausb/TeslaCam:/media/TeslaCam" \
+            teslacam-browser-ng:ci
+      - name: Run the tests in the Playwright container
+        run: |
+          docker run --rm --network host -e CI=true -e TZ \
+            -e SERVER_URL=http://localhost:8081 \
+            -e TESLAUSB_URL=http://localhost:8082 \
+            -e CLIPS=/work/fixtures/TeslaCam \
+            -e TESLAUSB_CLIPS=/work/fixtures/teslausb/TeslaCam \
+            -v "$PWD:/work" -w /work \
+            "mcr.microsoft.com/playwright:v${{ needs.checks.outputs.playwright }}-noble" \
+            bash -c "npx -y yarn@1.22.22 install --frozen-lockfile \
+              --ignore-scripts && npx playwright install --with-deps chrome \
+              && test/run-all.sh"
+      - if: failure()
+        run: docker logs app; docker logs app-teslausb
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: report-docker
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  publish:
+    name: Publish the image
+    needs: [source, docker]
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Version from package.json
+        id: version
+        run: |
+          v=$(node -p "require('./package.json').version")
+          echo "full=$v" >> "$GITHUB_OUTPUT"
+          echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest
+            type=sha
+            type=raw,value=${{ steps.version.outputs.full }}
+            type=raw,value=${{ steps.version.outputs.minor }}
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish (amd64, arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  demo:
+    name: Publish the demo site
+    needs: [source, docker]
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile --ignore-scripts
+      # The sample clips are not in git. They are one file, demo-clips.tar.gz
+      # (TeslaCam/{SavedClips,SentryClips}/...), on the release tagged
+      # "demo-clips". Make them with scripts/make-demo-clips.py.
+      - name: Get the sample clips
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p demo-clips
+          gh release download demo-clips -p demo-clips.tar.gz -O - \
+            | tar -xz -C demo-clips
+      # The clips were recorded in this zone; the list times use it.
+      - run: scripts/build-demo-site.sh demo-clips/TeslaCam site
+        env:
+          TZ: America/Los_Angeles
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v5

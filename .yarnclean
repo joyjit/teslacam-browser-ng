@@ -1,7 +1,6 @@
-# test directories
+# test directories. Not plain "test" or "tests": the Playwright test
+# runner keeps its own code in folders with those names.
 __tests__
-test
-tests
 powered-test
 
 # asset directories

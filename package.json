@@ -73,6 +73,7 @@
     }
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@popperjs/core": "^2.1.0",
     "bootstrap-vue": "^2.6.1",
     "electron": "^45.1.0",

@@ -3,7 +3,8 @@ const services = require( "./services" )
 const fs = require( "fs" )
 const express = require( "express" )
 
-const port = 8088
+// PORT=<number> to listen somewhere other than 8088.
+const port = Number( process.env.PORT ) || 8088
 const defaultFolder = ( process.argv.length > 2 ) ? process.argv[ 2 ] : ""
 
 // TESLACAM_MODE=teslausb: a fixed clip archive. Only the start folder (no
